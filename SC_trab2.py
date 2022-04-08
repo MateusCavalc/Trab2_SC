@@ -205,10 +205,17 @@ def ExpandKey(key_state, round_count):
     RotWord(w3)
     SubWord(w3)
     AddRoundConst(w3, round_count)
+
+    # Perform w4
     for i, cell in enumerate(key_state[:,0]):
         new_key_state[0][i] = w3[i] ^ cell
     
-    
+    # Perform w5, w6, w7
+    for i in range(0, 3):
+        w_aux = new_key_state[:,i]
+        
+        for j, cell in enumerate(key_state[:,i+1]):
+            new_key_state[i+1][j] = w_aux[j] ^ cell
 
 def SubBytes(curr_state, inv=False):
     for j in range(0, 4):
@@ -280,6 +287,8 @@ def AES_encoder(plain, key):
         plain_offset += offset_adder
         
         # print("Initial state:", state)
+
+        round_count = 0
           
         # Sequencia de operações
         AddRoundKey(state, key_state)
@@ -288,7 +297,9 @@ def AES_encoder(plain, key):
             SubBytes(state)
             ShiftRows(state)
             MixColumns(state)
+            ExpandKey(key_state, round_count)
             AddRoundKey(state, key_state)
+            round_count += 1
             
         SubBytes(state)
         ShiftRows(state)
@@ -337,6 +348,8 @@ def AES_decoder(encoded, key):
         enc_offset += offset_adder
         
         print("Initial state:", state)
+
+        round_count = 0
           
         # Sequencia de operações invertida
         AddRoundKey(state, key_state)
@@ -344,10 +357,12 @@ def AES_decoder(encoded, key):
         SubBytes(state, inv=True)
         
         for n in range(ROUNDS[len(key) * 8] - 1):
+            ExpandKey(key_state, round_count)
             AddRoundKey(state, key_state)
             MixColumns(state, inv=True)
             ShiftRows(state, inv=True)
             SubBytes(state, inv=True)
+            round_count += 1
             
         AddRoundKey(state, key_state)
         
@@ -356,8 +371,9 @@ def AES_decoder(encoded, key):
         # put final state (16 encoded characters) in encoded string
         for j in range(0, 4):
             for i in range(0, 4):
-                encoded += chr(state[i][j])
-                encoded += ' '
+                print(state[i][j], chr(state[i][j]))
+                decoded += chr(state[i][j])
+                decoded += ' '
                     
         state.fill(0)
         
