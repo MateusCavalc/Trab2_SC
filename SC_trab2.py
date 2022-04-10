@@ -1,6 +1,7 @@
 import random
 import string
 import numpy
+import copy
 from Crypto.Util import number
 
 MIN_BITSIZE = 8 # BITS
@@ -108,7 +109,7 @@ def reverse_lookup(byte):
 
 ROUNDS = {EAS_128:10, EAS_192:12, EAS_256:14}
 
-PLAIN_TEXT = "Texto exemplo para cifracao"
+PLAIN_TEXT = "secretmessagenow"
 
 def MDC(a, b):
     
@@ -196,13 +197,16 @@ def SubWord(word):
 def AddRoundConst(word, iter):
     curr_round = ROUND_CONSTANT[:,iter]
 
-    word = numpy.add(word, curr_round)
+    print('curr_round:\n{}'.format(curr_round))
+
+    for i in range(0, 4):
+        word[i] = word[i] ^ curr_round[i]
 
 def ExpandKey(key_state, round_count):
     print('key_state:\n{}'.format(key_state))
     new_key_state = numpy.zeros(shape=(4, 4), dtype=numpy.byte)
 
-    w3 = key_state[:,3]
+    w3 = copy.deepcopy(key_state[:,3]) # TODO
     print('w3:\n{}'.format(w3))
     RotWord(w3)
     print('w3(rotword):\n{}'.format(w3))
@@ -213,14 +217,15 @@ def ExpandKey(key_state, round_count):
 
     # Perform w4
     for i, cell in enumerate(key_state[:,0]):
-        new_key_state[0][i] = w3[i] ^ cell
+        new_key_state[i][0] = w3[i] ^ cell
     
     # Perform w5, w6, w7
     for i in range(0, 3):
         w_aux = new_key_state[:,i]
-        
+
         for j, cell in enumerate(key_state[:,i+1]):
-            new_key_state[i+1][j] = w_aux[j] ^ cell
+            # print(hex(w_aux[j] & 0xff), hex(cell & 0xff), hex((w_aux[j] ^ cell) & 0xff))
+            new_key_state[j][i+1] = w_aux[j] ^ cell
 
     # Update key state with new key state
     for i in range(0, 4):
@@ -319,6 +324,8 @@ def AES_encoder(plain, key):
           
         # Sequencia de operações
         AddRoundKey(state, key_state)
+
+        print(state)
         
         for n in range(ROUNDS[len(key) * 8] - 1):
             SubBytes(state)
@@ -408,7 +415,7 @@ def AES_decoder(encoded, key):
 
 if __name__ == '__main__':
 
-    # numpy.set_printoptions(formatter={'int':hex})
+    numpy.set_printoptions(formatter={'int':lambda x:hex(int(x) & 0xff)})
     
     print("Plain text:", PLAIN_TEXT)
     
