@@ -199,12 +199,17 @@ def AddRoundConst(word, iter):
     word = numpy.add(word, curr_round)
 
 def ExpandKey(key_state, round_count):
+    print('key_state:\n{}'.format(key_state))
     new_key_state = numpy.zeros(shape=(4, 4), dtype=numpy.byte)
 
     w3 = key_state[:,3]
+    print('w3:\n{}'.format(w3))
     RotWord(w3)
+    print('w3(rotword):\n{}'.format(w3))
     SubWord(w3)
+    print('w3(subword):\n{}'.format(w3))
     AddRoundConst(w3, round_count)
+    print('w3(addroundconst):\n{}'.format(w3))
 
     # Perform w4
     for i, cell in enumerate(key_state[:,0]):
@@ -217,16 +222,28 @@ def ExpandKey(key_state, round_count):
         for j, cell in enumerate(key_state[:,i+1]):
             new_key_state[i+1][j] = w_aux[j] ^ cell
 
+    # Update key state with new key state
+    for i in range(0, 4):
+        for j in range(0, 4):
+            key_state[i][j] = new_key_state[i][j]
+
+    print('new key_state:\n{}'.format(new_key_state))    
+
 def SubBytes(curr_state, inv=False):
+    # print('curr_state: {}'.format(curr_state))
     for j in range(0, 4):
         for i in range(0, 4):
             if not inv:
                 curr_state[i][j] = lookup(curr_state[i][j])
             else:
                 curr_state[i][j] = reverse_lookup(curr_state[i][j])
+
+    # print('curr_state(subbytes): {}'.format(curr_state))
     
 def ShiftRows(curr_state, inv=False):
     aux_array = numpy.zeros(4)
+
+    # print('curr_state: {}'.format(curr_state))
     
     for i in range(1, 4):
         for j in range(0, 4):
@@ -240,8 +257,11 @@ def ShiftRows(curr_state, inv=False):
             
         for j in range(0, 4):
             curr_state[i][j] = aux_array[j]
+
+    # print('curr_state(shiftrows): {}'.format(curr_state))
         
 def MixColumns(curr_state, inv=False):
+    # print('curr_state: {}'.format(curr_state))
     for j in range(0, 4):
         col = curr_state[:,j]
         
@@ -252,11 +272,16 @@ def MixColumns(curr_state, inv=False):
         
         for i in range(0, 4):
             curr_state[i][j] = new_col[i]
+
+    # print('curr_state(mixcolumns): {}'.format(curr_state))
             
 def AddRoundKey(curr_state, key_state):
+    # print('curr_state: {}'.format(curr_state))
     for j in range(0, 4):
         for i in range(0, 4):
             curr_state[i][j] = curr_state[i][j] ^ key_state[i][j]
+
+    # print('curr_state(addroundkey): {}'.format(curr_state))
     
 def AES_encoder(plain, key):
     encoded = ''
@@ -271,6 +296,8 @@ def AES_encoder(plain, key):
         for i in range(0, 4):
             key_state[i][j] = ord(key[count])
             count += 1
+
+    print('Initial key state:\n{}'.format(key_state))
     
     while plain_offset < len(plain):
         offset_adder = 0
@@ -380,6 +407,8 @@ def AES_decoder(encoded, key):
     return decoded
 
 if __name__ == '__main__':
+
+    # numpy.set_printoptions(formatter={'int':hex})
     
     print("Plain text:", PLAIN_TEXT)
     
@@ -396,7 +425,8 @@ if __name__ == '__main__':
     
     # EAS cipher
     print("\n< AES >")   
-    aes_key = Chave_sim(SIM_KEY_SIZE)
+    # aes_key = Chave_sim(SIM_KEY_SIZE)
+    aes_key = 'satishcjisboring'
     aes_encoded = AES_encoder(PLAIN_TEXT, aes_key)
     print("AES_encoded:", aes_encoded)
     aes_decoded = AES_decoder(aes_encoded, aes_key)
