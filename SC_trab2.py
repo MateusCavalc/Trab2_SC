@@ -84,32 +84,62 @@ reverse_aes_sbox = [
 ROUND_CONSTANT = numpy.array([[0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36],
                   [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
                   [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
-                  [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]])
+                  [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]], dtype='<u1')
 
-GALOIS_FIELD = [[2, 3, 1, 1],
-                [1, 2, 3, 1],
-                [1, 1, 2, 3],
-                [3, 1, 1, 2]]
+GALOIS_FIELD = numpy.array([[2, 3, 1, 1],
+                            [1, 2, 3, 1],
+                            [1, 1, 2, 3],
+                            [3, 1, 1, 2]], dtype='<u1')
 
-INV_GALOIS_FIELD = [[14, 11, 13, 9],
-                    [9, 14, 11, 13],
-                    [13, 9, 14, 11],
-                    [11, 13, 9, 14]]
+INV_GALOIS_FIELD = numpy.array([[14, 11, 13, 9],
+                                [9, 14, 11, 13],
+                                [13, 9, 14, 11],
+                                [11, 13, 9, 14]], dtype='<u1')
 
 def lookup(byte):
     x = byte >> 4
     y = byte & 15
     return aes_sbox[x][y]
 
-
 def reverse_lookup(byte):
     x = byte >> 4
     y = byte & 15
     return reverse_aes_sbox[x][y]
 
+def gmul(b, a):
+    """
+    Multiplication in GF(2^8).
+    :param int a: operand
+    :param int b: another operand
+    :return: a•b over GF(2^8)
+    :rtype: int
+    ref: https://en.wikipedia.org/wiki/Finite_field_arithmetic
+    """
+    # modified peasant's algorithm
+    p = 0
+    while a and b:
+        # each iteration has that `a•b + p` is the product
+        if b & 0x1:
+            p ^= a
+        carry = a & 0x80  # the leftmost bit of a
+        a <<= 1
+        if carry:
+            a ^= 0x11b  # sub 0b1_0001_1011, a.k.a. the irreducible polynomial x^8+x^4+x^3+x^1+1
+        b >>= 1
+    return p
+
+def mat_mult(a, b):
+    result = numpy.zeros(4, dtype='<u1')
+
+    for i in range(0, 4):
+        for j in range(0, 4):
+            result[i] = result[i] ^ gmul(b[j], a[i][j])
+
+    return result
+
 ROUNDS = {EAS_128:10, EAS_192:12, EAS_256:14}
 
-PLAIN_TEXT = "secretmessagenow"
+PLAIN_TEXT = "secretmessagenowandmore"
 
 def MDC(a, b):
     
@@ -197,23 +227,20 @@ def SubWord(word):
 def AddRoundConst(word, iter):
     curr_round = ROUND_CONSTANT[:,iter]
 
-    print('curr_round:\n{}'.format(curr_round))
-
     for i in range(0, 4):
         word[i] = word[i] ^ curr_round[i]
 
 def ExpandKey(key_state, round_count):
-    print('key_state:\n{}'.format(key_state))
     new_key_state = numpy.zeros(shape=(4, 4), dtype=numpy.byte)
 
     w3 = copy.deepcopy(key_state[:,3]) # TODO
-    print('w3:\n{}'.format(w3))
+    # print('w3:\n{}'.format(w3))
     RotWord(w3)
-    print('w3(rotword):\n{}'.format(w3))
+    # print('w3(rotword):\n{}'.format(w3))
     SubWord(w3)
-    print('w3(subword):\n{}'.format(w3))
+    # print('w3(subword):\n{}'.format(w3))
     AddRoundConst(w3, round_count)
-    print('w3(addroundconst):\n{}'.format(w3))
+    # print('w3(addroundconst):\n{}'.format(w3))
 
     # Perform w4
     for i, cell in enumerate(key_state[:,0]):
@@ -232,24 +259,17 @@ def ExpandKey(key_state, round_count):
         for j in range(0, 4):
             key_state[i][j] = new_key_state[i][j]
 
-    print('new key_state:\n{}'.format(new_key_state))    
-
 def SubBytes(curr_state, inv=False):
-    # print('curr_state: {}'.format(curr_state))
     for j in range(0, 4):
         for i in range(0, 4):
             if not inv:
                 curr_state[i][j] = lookup(curr_state[i][j])
             else:
                 curr_state[i][j] = reverse_lookup(curr_state[i][j])
-
-    # print('curr_state(subbytes): {}'.format(curr_state))
     
 def ShiftRows(curr_state, inv=False):
     aux_array = numpy.zeros(4)
 
-    # print('curr_state: {}'.format(curr_state))
-    
     for i in range(1, 4):
         for j in range(0, 4):
             if not inv:
@@ -262,47 +282,55 @@ def ShiftRows(curr_state, inv=False):
             
         for j in range(0, 4):
             curr_state[i][j] = aux_array[j]
-
-    # print('curr_state(shiftrows): {}'.format(curr_state))
         
 def MixColumns(curr_state, inv=False):
-    # print('curr_state: {}'.format(curr_state))
     for j in range(0, 4):
         col = curr_state[:,j]
-        
+
         if not inv:
-            new_col = numpy.matmul(GALOIS_FIELD, col)
+            new_col = mat_mult(GALOIS_FIELD, col)
         else:
-            new_col = numpy.matmul(INV_GALOIS_FIELD, col)
-        
+            new_col = mat_mult(INV_GALOIS_FIELD, col)
+
         for i in range(0, 4):
             curr_state[i][j] = new_col[i]
-
-    # print('curr_state(mixcolumns): {}'.format(curr_state))
             
 def AddRoundKey(curr_state, key_state):
-    # print('curr_state: {}'.format(curr_state))
     for j in range(0, 4):
         for i in range(0, 4):
             curr_state[i][j] = curr_state[i][j] ^ key_state[i][j]
+    
+def Compute_keys(key, rounds):
+    keys = []
+    round_count = 0
 
-    # print('curr_state(addroundkey): {}'.format(curr_state))
-    
-def AES_encoder(plain, key):
-    encoded = ''
-    state = numpy.zeros(shape=(4, 4), dtype=numpy.byte)
-    plain_offset = 0
-    
-    key_state = numpy.zeros(shape=(4, 4), dtype=numpy.byte)
-    
+    key_state = numpy.zeros(shape=(4, 4), dtype='<u1')
+
     # fill key state with 16 byte key
     count = 0
     for j in range(0, 4):
         for i in range(0, 4):
-            key_state[i][j] = ord(key[count])
+            key_state[i][j] = key[count]
             count += 1
 
-    print('Initial key state:\n{}'.format(key_state))
+    # key_state[0] = [0x2b, 0x28, 0xab, 0x09]
+    # key_state[1] = [0x7e, 0xae, 0xf7, 0xcf]
+    # key_state[2] = [0x15, 0xd2, 0x15, 0x4f]
+    # key_state[3] = [0x16, 0xa6, 0x88, 0x3c]
+
+    keys.append(copy.deepcopy(key_state))
+
+    for i in range(0, rounds):
+        ExpandKey(key_state, round_count)
+        keys.append(copy.deepcopy(key_state))
+        round_count += 1
+
+    return keys
+
+def AES_encoder(plain, keys):
+    encoded = b''
+    state = numpy.zeros(shape=(4, 4), dtype='<u1')
+    plain_offset = 0
     
     while plain_offset < len(plain):
         offset_adder = 0
@@ -314,100 +342,84 @@ def AES_encoder(plain, key):
                     state[i][j] = ord(plain[plain_offset + offset_adder])
                     offset_adder += 1
                 else:
-                    break            
+                    break
+
+        # state[0] = [0x32, 0x88, 0x31, 0xe0]
+        # state[1] = [0x43, 0x5a, 0x31, 0x37]
+        # state[2] = [0xf6, 0x30, 0x98, 0x07]
+        # state[3] = [0xa8, 0x8d, 0xa2, 0x34]
             
         plain_offset += offset_adder
         
         # print("Initial state:", state)
 
-        round_count = 0
+        blocks = []
+        round_count = 1
+
+        key_state = keys[0]
           
         # Sequencia de operações
         AddRoundKey(state, key_state)
-
-        print(state)
         
-        for n in range(ROUNDS[len(key) * 8] - 1):
+        for n in range(1, len(keys) - 1):
             SubBytes(state)
             ShiftRows(state)
             MixColumns(state)
-            ExpandKey(key_state, round_count)
+            key_state = keys[round_count]
             AddRoundKey(state, key_state)
             round_count += 1
             
         SubBytes(state)
         ShiftRows(state)
+        key_state = keys[round_count]
         AddRoundKey(state, key_state)
         
-        # print("Final state:", state)
-            
-        # put final state (16 encoded characters) in encoded string
-        for j in range(0, 4):
-            for i in range(0, 4):
-                encoded += str(state[i][j])
-                encoded += ' '
+        encoded += state.transpose().tobytes()
                     
         state.fill(0)
         
     return encoded
 
-def AES_decoder(encoded, key):
-    decoded = ''
-    state = numpy.zeros(shape=(4, 4), dtype=numpy.byte)
+def AES_decoder(encoded, keys):
+    decoded = b''
+    state = numpy.zeros(shape=(4, 4), dtype='<u1')
     enc_offset = 0
-    
-    enc_blocks = encoded.split()
-    
-    key_state = numpy.zeros(shape=(4, 4), dtype=numpy.byte)
-    
-    # fill key state with 16 byte key
-    count = 0
-    for j in range(0, 4):
-        for i in range(0, 4):
-            key_state[i][j] = ord(key[count])
-            count += 1
-    
-    while enc_offset < len(enc_blocks):
+      
+    while enc_offset < len(encoded):
         offset_adder = 0
         
         # fill state with 16 characters from plain text
         for j in range(0, 4):
             for i in range(0, 4):
-                if enc_offset + offset_adder < len(enc_blocks):
-                    state[i][j] = enc_blocks[enc_offset + offset_adder]
+                if enc_offset + offset_adder < len(encoded):
+                    state[i][j] = encoded[enc_offset + offset_adder]
                     offset_adder += 1
                 else:
-                    break            
+                    break
             
         enc_offset += offset_adder
-        
-        print("Initial state:", state)
 
-        round_count = 0
+        round_count = 9
+
+        key_state = keys[len(keys) - 1]
           
         # Sequencia de operações invertida
         AddRoundKey(state, key_state)
         ShiftRows(state, inv=True)
         SubBytes(state, inv=True)
         
-        for n in range(ROUNDS[len(key) * 8] - 1):
-            ExpandKey(key_state, round_count)
+        for n in range(1, len(keys) - 1):
+            key_state = keys[round_count]
             AddRoundKey(state, key_state)
             MixColumns(state, inv=True)
             ShiftRows(state, inv=True)
             SubBytes(state, inv=True)
-            round_count += 1
-            
-        AddRoundKey(state, key_state)
+            round_count -= 1
         
-        print("Final state:", state)
-            
-        # put final state (16 encoded characters) in encoded string
-        for j in range(0, 4):
-            for i in range(0, 4):
-                print(state[i][j], chr(state[i][j]))
-                decoded += chr(state[i][j])
-                decoded += ' '
+        key_state = keys[0]
+        AddRoundKey(state, key_state)
+          
+        decoded += state.transpose().tobytes()
                     
         state.fill(0)
         
@@ -415,7 +427,7 @@ def AES_decoder(encoded, key):
 
 if __name__ == '__main__':
 
-    numpy.set_printoptions(formatter={'int':lambda x:hex(int(x) & 0xff)})
+    numpy.set_printoptions(formatter={'int':hex})
     
     print("Plain text:", PLAIN_TEXT)
     
@@ -432,9 +444,15 @@ if __name__ == '__main__':
     
     # EAS cipher
     print("\n< AES >")   
-    # aes_key = Chave_sim(SIM_KEY_SIZE)
-    aes_key = 'satishcjisboring'
-    aes_encoded = AES_encoder(PLAIN_TEXT, aes_key)
+    aes_key = Chave_sim(SIM_KEY_SIZE)
+    # aes_key = 'satishcjisboring'
+    print("> key unicode:", aes_key.encode('utf-8'))
+
+    rounds = ROUNDS[len(aes_key) * 8]
+
+    aes_keys = Compute_keys(aes_key.encode('utf-8'), rounds)
+    aes_encoded = AES_encoder(PLAIN_TEXT, aes_keys)
+    aes_decoded = AES_decoder(aes_encoded, aes_keys)
+
     print("AES_encoded:", aes_encoded)
-    aes_decoded = AES_decoder(aes_encoded, aes_key)
     print("AES_decoded:", aes_decoded)
