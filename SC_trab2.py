@@ -96,6 +96,10 @@ INV_GALOIS_FIELD = numpy.array([[14, 11, 13, 9],
                                 [13, 9, 14, 11],
                                 [11, 13, 9, 14]], dtype='<u1')
 
+ROUNDS = {EAS_128:10, EAS_192:12, EAS_256:14}
+
+PLAIN_TEXT = "secretmessagenow"
+
 def lookup(byte):
     x = byte >> 4
     y = byte & 15
@@ -136,10 +140,6 @@ def mat_mult(a, b):
             result[i] = result[i] ^ gmul(b[j], a[i][j])
 
     return result
-
-ROUNDS = {EAS_128:10, EAS_192:12, EAS_256:14}
-
-PLAIN_TEXT = "secretmessagenowandmore"
 
 def MDC(a, b):
     
@@ -343,15 +343,8 @@ def AES_encoder(plain, keys):
                     offset_adder += 1
                 else:
                     break
-
-        # state[0] = [0x32, 0x88, 0x31, 0xe0]
-        # state[1] = [0x43, 0x5a, 0x31, 0x37]
-        # state[2] = [0xf6, 0x30, 0x98, 0x07]
-        # state[3] = [0xa8, 0x8d, 0xa2, 0x34]
             
         plain_offset += offset_adder
-        
-        # print("Initial state:", state)
 
         blocks = []
         round_count = 1
@@ -423,7 +416,7 @@ def AES_decoder(encoded, keys):
                     
         state.fill(0)
         
-    return decoded
+    return decoded.rstrip(b'\x00')
 
 if __name__ == '__main__':
 
