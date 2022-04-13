@@ -5,6 +5,7 @@ import copy
 from Crypto.Util import number
 import hashlib
 import base64
+from sys import getsizeof
 
 MIN_BITSIZE = 8 # BITS
 SIM_KEY_SIZE = 16 # BYTES
@@ -12,6 +13,13 @@ KEY_CHARS = string.ascii_uppercase + string.digits # CHARS TO BUILD SIM KEYS
 EAS_128 = 128
 EAS_192 = 192
 EAS_256 = 256
+
+MAX_BLOCK_SIZE = 32
+OAEP_M_SIZE = 32
+OAEP_K_SIZE = 80
+
+OAEP_BPEC = 2 # OAEP BYTES PER ENCODED CHAR
+OAEP_BPEB = 112 # OAPE BYTES PER ENCODED BLOCK
 
 aes_sbox = [
     [int('63', 16), int('7c', 16), int('77', 16), int('7b', 16), int('f2', 16), int('6b', 16), int('6f', 16), int('c5', 16), int(
@@ -102,6 +110,29 @@ ROUNDS = {EAS_128:10, EAS_192:12, EAS_256:14}
 
 PLAIN_TEXT = "secretmessagenow"
 
+def AddPadding(block):
+    M = copy.deepcopy(block)
+    while len(M) < OAEP_M_SIZE:
+        M += '0'
+
+    return M
+
+def xor(a, b):
+    result = b''
+    print("a:", a, len(a))
+    print("b:", b.hex(':'), len(b))
+
+    for a_byte, b_byte in zip(a, b):
+        # print(hex(a_byte), hex(b_byte), hex(a_byte ^ b_byte))
+        try:   
+            result += (a_byte ^ b_byte).to_bytes(1, byteorder='little')
+        except:
+            result += (a_byte ^ b_byte).item().to_bytes(1, byteorder='little')
+
+    print(result)
+
+    return result
+
 def lookup(byte):
     x = byte >> 4
     y = byte & 15
@@ -176,36 +207,131 @@ def Get_D(E, Pn):
         if (E * D) % Pn == 1:
             return D
         
-def RSA_encoder(plain, N, E):
-    enc = ''
-    
+def RSA_OAEP_encoder(plain, private_key):
+    enc = b''
+
+    E = private_key[0]
+    N = private_key[1]
+
+    plain_blocks = []
+    block = ''
+
     for char in plain:
-        enc_char = (ord(char) ** E) % N
-        enc += str(enc_char)
-        enc += ' '
+        block += char
+        if len(block) >= MAX_BLOCK_SIZE:
+            plain_blocks.append(copy.deepcopy(block))
+            block = ''
+
+    if len(block) > 0:
+        plain_blocks.append(copy.deepcopy(block))
+
+    print("blocks:", plain_blocks)
+
+    r_size = 5
+    plain_counter = 0
+
+    sha256 = hashlib.sha256()
+    sha1 = hashlib.sha1()
+    r = numpy.random.randint(2, size=(20,))
+    r = bytes(r.tolist())
+    print("r:", r, len(r))
+    sha256.update(r)
+    G = sha256.digest()
+    # print("hashed_r:", G.hex(':'))
+        
+    for block in plain_blocks:
+        M = AddPadding(block)
+        print("M:", M)
+        P1 = xor(M.encode(), G)
+        sha1.update(P1)
+        H = sha1.digest()
+        P2 = xor(r, H)
+        print("G:", G.hex(':'), len(G))
+        print("H:", H.hex(':'), len(H))
+        print("P1:", P1.hex(':'), len(P1))
+        print("P2:", P2.hex(':'), len(P2))
+        P = P1 + P2
+        print("P:", P.hex(':'), len(P))
+    
+        for b in P:
+            enc_b = (b ** E) % N
+            # print(hex(b), hex(enc_b))
+            # print(enc_b.to_bytes(2, byteorder='big'))
+            enc += enc_b.to_bytes(2, byteorder='big')
         
     return enc
     
-def RSA_decoder(encoded, N, D):
-    dec = ''
+def RSA_OAEP_decoder(encoded, public_key):
+    dec = b''
+
+    D = public_key[0]
+    N = public_key[1]
     
-    enc_blocks = encoded.split()
+    enc_blocks = []
+    block = []
+
+    for b in encoded:
+        block.append(b)
+        if len(block) >= OAEP_BPEB:
+            enc_blocks.append(copy.deepcopy(block))
+            block = []
+
+    if len(block) > 0:
+        enc_blocks.append(copy.deepcopy(block))
+
+    # print("Encoded blocks:", enc_blocks)
+
+    P = b''
     
+    r_size = 5
+    plain_counter = 0
+
+    sha256 = hashlib.sha256()
+    sha1 = hashlib.sha1()
+        
     for block in enc_blocks:
-        dec_char = (int(block) ** D) % N
-        dec += chr(dec_char)
+        for i in range(0, len(block), 2):
+            # print(block[i], block[i+1])
+            # print(block[i].to_bytes(1, byteorder='big'), block[i+1].to_bytes(1, byteorder='big'), block[i].to_bytes(1, byteorder='big') + block[i+1].to_bytes(1, byteorder='big'))
+            b = block[i].to_bytes(1, byteorder='big') + block[i+1].to_bytes(1, byteorder='big')
+            enc_b = (int.from_bytes(b, byteorder='big') ** D) % N
+            # print(b.hex(), hex(enc_b))
+            P += enc_b.to_bytes(1, byteorder='big')
+
+        print("P:", P.hex(':'), len(P))
+
+        P1 = P[:OAEP_M_SIZE]
+        P2 = P[OAEP_M_SIZE:]
+
+        sha1.update(P1)
+        H = sha1.digest()
+        r = xor(P2, H)
+        print("r(?):", r)
+        sha256.update(r)
+        G = sha256.digest()
+
+        print("G:", G.hex(':'), len(G))
+        print("H:", H.hex(':'), len(H))
+        print("P1:", P1.hex(':'), len(P1))
+        print("P2:", P2.hex(':'), len(P2))
+
+        M = xor(P1, G)
+        dec += M
         
     return dec
 
 def Chaves_assim():
     N, E, Pn = Get_N_and_E(MIN_BITSIZE)
     D = Get_D(E, Pn)
+
+    public_key = (E, N)
+    private_key = (D, N)
     
-    print('N = {}'.format(N))
-    print('E = {}'.format(E))    
-    print('D = {}'.format(D))
+    print('N = {}'.format(hex(N)))
+    print('E = {}'.format(hex(E)))
+    print('D = {}'.format(hex(D)))
     
-    return N, E, D
+    return public_key, private_key
 
 def Chave_sim(size_bytes):
     return ''.join(random.choice(KEY_CHARS) for _ in range(size_bytes))
@@ -429,33 +555,36 @@ if __name__ == '__main__':
     sha3 = hashlib.sha3_256()
     sha3.update(PLAIN_TEXT.encode('utf-8'))
     plain_hash = sha3.hexdigest()
-    print("Plain hash:", plain_hash)
+    print("Plain hash:", plain_hash, type(plain_hash), getsizeof(plain_hash))
 
-    # =============================================================================
-#     # RSA cipher
-#     print("\n< RSA >")
-#     N, E, D = Chaves_assim() 
-#     rsa_encoded = RSA_encoder(PLAIN_TEXT, N, E)  
-#     print("RSA_encoded:", rsa_encoded)
-#     rsa_decoded = RSA_decoder(rsa_encoded, N, D)
-#     print("RSA_decoded:", rsa_decoded)
-#     print()
-# =============================================================================
+    # RSA cipher
+    print("\n< RSA >")
+    public_key, private_key = Chaves_assim()
+
+    rsa_encoded = RSA_OAEP_encoder(PLAIN_TEXT, private_key)
+    print("\n\n>>> RSA_encoded:", rsa_encoded.hex(':'), len(rsa_encoded))
+    rsa_decoded = RSA_OAEP_decoder(rsa_encoded, public_key)
+    print("\n\n>>> RSA_decoded:", rsa_decoded)
+    print()
     
     # EAS cipher
-    print("\n< AES >")   
-    aes_key = Chave_sim(SIM_KEY_SIZE)
+    # print("\n< AES >")   
+    # aes_key = Chave_sim(SIM_KEY_SIZE)
     # aes_key = 'satishcjisboring'
-    print("> key unicode:", aes_key.encode('utf-8'))
+    # print("> key unicode:", aes_key.encode('utf-8'))
 
-    rounds = ROUNDS[len(aes_key) * 8]
+    # rounds = ROUNDS[len(aes_key) * 8]
 
-    aes_keys = Compute_keys(aes_key.encode('utf-8'), rounds)
-    aes_encoded = AES_encoder(plain_hash, aes_keys)
-    aes_decoded = AES_decoder(aes_encoded, aes_keys)
+    # aes_keys = Compute_keys(aes_key.encode('utf-8'), rounds)
+    # aes_encoded = AES_encoder(plain_hash, aes_keys)
+    # aes_decoded = AES_decoder(aes_encoded, aes_keys)
 
-    print("> AES_encoded:", aes_encoded)
-    print("> AES_decoded:", aes_decoded.decode('utf-8'))
+    # print("> AES_encoded:", aes_encoded)
+    # print("> AES_decoded:", aes_decoded.decode('utf-8'))
 
-    base64_bytes = base64.b64encode(aes_encoded)
-    print("> BASE64 encoded:", base64_bytes.decode('ascii'))
+    # # base64_bytes = base64.b64encode(rsa_encoded)
+    # # print("> BASE64 encoded:", base64_bytes.decode('ascii'))
+
+    # # from_base64 = base64.b64decode(base64_bytes)
+
+    # # print("> BASE64 decoded:", from_base64)
