@@ -3,6 +3,8 @@ import string
 import numpy
 import copy
 from Crypto.Util import number
+import hashlib
+import base64
 
 MIN_BITSIZE = 8 # BITS
 SIM_KEY_SIZE = 16 # BYTES
@@ -423,8 +425,13 @@ if __name__ == '__main__':
     numpy.set_printoptions(formatter={'int':hex})
     
     print("Plain text:", PLAIN_TEXT)
-    
-# =============================================================================
+
+    sha3 = hashlib.sha3_256()
+    sha3.update(PLAIN_TEXT.encode('utf-8'))
+    plain_hash = sha3.hexdigest()
+    print("Plain hash:", plain_hash)
+
+    # =============================================================================
 #     # RSA cipher
 #     print("\n< RSA >")
 #     N, E, D = Chaves_assim() 
@@ -444,8 +451,11 @@ if __name__ == '__main__':
     rounds = ROUNDS[len(aes_key) * 8]
 
     aes_keys = Compute_keys(aes_key.encode('utf-8'), rounds)
-    aes_encoded = AES_encoder(PLAIN_TEXT, aes_keys)
+    aes_encoded = AES_encoder(plain_hash, aes_keys)
     aes_decoded = AES_decoder(aes_encoded, aes_keys)
 
-    print("AES_encoded:", aes_encoded)
-    print("AES_decoded:", aes_decoded)
+    print("> AES_encoded:", aes_encoded)
+    print("> AES_decoded:", aes_decoded.decode('utf-8'))
+
+    base64_bytes = base64.b64encode(aes_encoded)
+    print("> BASE64 encoded:", base64_bytes.decode('ascii'))
