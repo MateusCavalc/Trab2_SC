@@ -14,12 +14,12 @@ EAS_128 = 128
 EAS_192 = 192
 EAS_256 = 256
 
-MAX_BLOCK_SIZE = 32
+MAX_BLOCK_SIZE = 30
 OAEP_M_SIZE = 32
 OAEP_K_SIZE = 80
 
 OAEP_BPEC = 2 # OAEP BYTES PER ENCODED CHAR
-OAEP_BPEB = 112 # OAPE BYTES PER ENCODED BLOCK
+OAEP_BPEB = 104 # OAPE BYTES PER ENCODED BLOCK
 
 aes_sbox = [
     [int('63', 16), int('7c', 16), int('77', 16), int('7b', 16), int('f2', 16), int('6b', 16), int('6f', 16), int('c5', 16), int(
@@ -108,19 +108,19 @@ INV_GALOIS_FIELD = numpy.array([[14, 11, 13, 9],
 
 ROUNDS = {EAS_128:10, EAS_192:12, EAS_256:14}
 
-PLAIN_TEXT = "secretmessagenow"
+PLAIN_TEXT = "Documento secreto"
 
 def AddPadding(block):
     M = copy.deepcopy(block)
     while len(M) < OAEP_M_SIZE:
-        M += '0'
+        M += chr(0x00)
 
     return M
 
 def xor(a, b):
     result = b''
-    print("a:", a, len(a))
-    print("b:", b.hex(':'), len(b))
+    # print("a:", a, len(a))
+    # print("b:", b.hex(), len(b))
 
     for a_byte, b_byte in zip(a, b):
         # print(hex(a_byte), hex(b_byte), hex(a_byte ^ b_byte))
@@ -128,8 +128,6 @@ def xor(a, b):
             result += (a_byte ^ b_byte).to_bytes(1, byteorder='little')
         except:
             result += (a_byte ^ b_byte).item().to_bytes(1, byteorder='little')
-
-    print(result)
 
     return result
 
@@ -208,6 +206,8 @@ def Get_D(E, Pn):
             return D
         
 def RSA_OAEP_encoder(plain, private_key):
+    print('\n[RSA_OAEP] Encoding \'{}\' with private key ({}, {}) ...\n'.format(plain, hex(private_key[0]), hex(private_key[1])))
+
     enc = b''
 
     E = private_key[0]
@@ -225,43 +225,44 @@ def RSA_OAEP_encoder(plain, private_key):
     if len(block) > 0:
         plain_blocks.append(copy.deepcopy(block))
 
-    print("blocks:", plain_blocks)
-
-    r_size = 5
-    plain_counter = 0
+    # print("blocks:", plain_blocks)
 
     sha256 = hashlib.sha256()
-    sha1 = hashlib.sha1()
     r = numpy.random.randint(2, size=(20,))
     r = bytes(r.tolist())
-    print("r:", r, len(r))
+    # print("r:", r, len(r))
     sha256.update(r)
     G = sha256.digest()
-    # print("hashed_r:", G.hex(':'))
+    # print("hashed_r:", G.hex())
         
     for block in plain_blocks:
+        sha1 = hashlib.sha1()
         M = AddPadding(block)
-        print("M:", M)
+        # print("M:", M)
         P1 = xor(M.encode(), G)
         sha1.update(P1)
         H = sha1.digest()
         P2 = xor(r, H)
-        print("G:", G.hex(':'), len(G))
-        print("H:", H.hex(':'), len(H))
-        print("P1:", P1.hex(':'), len(P1))
-        print("P2:", P2.hex(':'), len(P2))
+        # print("G:", G.hex(), len(G))
+        # print("H:", H.hex(), len(H))
+        # print("P1:", P1.hex(), len(P1))
+        # print("P2:", P2.hex(), len(P2))
         P = P1 + P2
-        print("P:", P.hex(':'), len(P))
+        # print("P:", P.hex(), len(P))
     
         for b in P:
             enc_b = (b ** E) % N
             # print(hex(b), hex(enc_b))
             # print(enc_b.to_bytes(2, byteorder='big'))
             enc += enc_b.to_bytes(2, byteorder='big')
+
+        sha1 = hashlib.sha1()
         
     return enc
     
 def RSA_OAEP_decoder(encoded, public_key):
+    print('\n[RSA_OAEP] Decoding \'{}\' with public key ({}, {}) ...\n'.format(encoded.hex(), hex(public_key[0]), hex(public_key[1])))
+
     dec = b''
 
     D = public_key[0]
@@ -280,16 +281,12 @@ def RSA_OAEP_decoder(encoded, public_key):
         enc_blocks.append(copy.deepcopy(block))
 
     # print("Encoded blocks:", enc_blocks)
-
-    P = b''
-    
-    r_size = 5
-    plain_counter = 0
-
-    sha256 = hashlib.sha256()
-    sha1 = hashlib.sha1()
         
     for block in enc_blocks:
+        P = b''
+        sha1 = hashlib.sha1()
+        sha256 = hashlib.sha256()
+
         for i in range(0, len(block), 2):
             # print(block[i], block[i+1])
             # print(block[i].to_bytes(1, byteorder='big'), block[i+1].to_bytes(1, byteorder='big'), block[i].to_bytes(1, byteorder='big') + block[i+1].to_bytes(1, byteorder='big'))
@@ -298,7 +295,7 @@ def RSA_OAEP_decoder(encoded, public_key):
             # print(b.hex(), hex(enc_b))
             P += enc_b.to_bytes(1, byteorder='big')
 
-        print("P:", P.hex(':'), len(P))
+        # print("P:", P.hex(), len(P))
 
         P1 = P[:OAEP_M_SIZE]
         P2 = P[OAEP_M_SIZE:]
@@ -306,19 +303,19 @@ def RSA_OAEP_decoder(encoded, public_key):
         sha1.update(P1)
         H = sha1.digest()
         r = xor(P2, H)
-        print("r(?):", r)
+        # print("r(?):", r)
         sha256.update(r)
         G = sha256.digest()
 
-        print("G:", G.hex(':'), len(G))
-        print("H:", H.hex(':'), len(H))
-        print("P1:", P1.hex(':'), len(P1))
-        print("P2:", P2.hex(':'), len(P2))
+        # print("G:", G.hex(), len(G))
+        # print("H:", H.hex(), len(H))
+        # print("P1:", P1.hex(), len(P1))
+        # print("P2:", P2.hex(), len(P2))
 
         M = xor(P1, G)
-        dec += M
+        dec += M.rstrip(b'\x00')
         
-    return dec
+    return dec.decode()
 
 def Chaves_assim():
     N, E, Pn = Get_N_and_E(MIN_BITSIZE)
@@ -552,8 +549,8 @@ if __name__ == '__main__':
     
     print("Plain text:", PLAIN_TEXT)
 
-    sha3 = hashlib.sha3_256()
-    sha3.update(PLAIN_TEXT.encode('utf-8'))
+    sha3 = hashlib.sha256()
+    sha3.update(PLAIN_TEXT.encode())
     plain_hash = sha3.hexdigest()
     print("Plain hash:", plain_hash, type(plain_hash), getsizeof(plain_hash))
 
@@ -561,12 +558,36 @@ if __name__ == '__main__':
     print("\n< RSA >")
     public_key, private_key = Chaves_assim()
 
-    rsa_encoded = RSA_OAEP_encoder(PLAIN_TEXT, private_key)
-    print("\n\n>>> RSA_encoded:", rsa_encoded.hex(':'), len(rsa_encoded))
-    rsa_decoded = RSA_OAEP_decoder(rsa_encoded, public_key)
-    print("\n\n>>> RSA_decoded:", rsa_decoded)
+    rsa_encoded = RSA_OAEP_encoder(plain_hash, private_key)
+    print("\n>>> RSA_encoded: {}".format(rsa_encoded.hex()))
+    
+    payload = {
+        'doc': PLAIN_TEXT, # BYTE
+        'encoded': rsa_encoded, # HEX
+        'public_key': public_key # HEX
+    }
+
+    input()
+
+    print("PAYLOAD")
+    print("Doc: {}".format(payload['doc']))
+    print("Encoded hash: {}".format(payload['encoded']))
+    print("Public key: ({}, {})".format(hex(payload['public_key'][0]), hex(payload['public_key'][1])))
+    print()
+
+    poss_hash = RSA_OAEP_decoder(payload['encoded'], payload['public_key'])
+    sha3 = hashlib.sha256()
+    sha3.update(payload['doc'].encode())
+    hashed_doc = sha3.hexdigest()
+    print("\n>>> RSA_decoded: {}".format(poss_hash))
+    print("\n>>> Hashed doc: {}".format(hashed_doc))
     print()
     
+    if poss_hash == hashed_doc:
+        print("Documento é valido :)\n")
+    else:
+        print("Documento é invalido :(\n")
+
     # EAS cipher
     # print("\n< AES >")   
     # aes_key = Chave_sim(SIM_KEY_SIZE)
