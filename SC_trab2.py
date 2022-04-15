@@ -5,7 +5,10 @@ import copy
 from Crypto.Util import number
 import hashlib
 import base64
-from sys import getsizeof
+from sys import getsizeof, argv
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import http.client
+import json
 
 MIN_BITSIZE = 8 # BITS
 SIM_KEY_SIZE = 16 # BYTES
@@ -13,6 +16,8 @@ KEY_CHARS = string.ascii_uppercase + string.digits # CHARS TO BUILD SIM KEYS
 EAS_128 = 128
 EAS_192 = 192
 EAS_256 = 256
+
+BUF_SIZE = 65536  # lets read stuff in 64kb chunks!
 
 MAX_BLOCK_SIZE = 30
 OAEP_M_SIZE = 32
@@ -543,69 +548,146 @@ def AES_decoder(encoded, keys):
         
     return decoded.rstrip(b'\x00')
 
+def HashFile(filename): # SHA3-256 (return HEX)
+    sha3 = hashlib.sha256()
+    hashed_file = ''
+
+    try:
+        with open(filename, 'rb') as f:
+            while True:
+                data = f.read(BUF_SIZE)
+                if not data:
+                    break
+                sha3.update(data)
+        
+        hashed_file = sha3.hexdigest()
+    except Exception as e:
+        print(e)
+
+    return hashed_file
+
+class MyHTTPRequestHandler(BaseHTTPRequestHandler):
+    def _set_headers(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.end_headers()
+
+    def do_HEAD(self):
+        self._set_headers()
+
+    #handle GET command  
+    def do_POST(self):
+
+        length = int(self.headers.get('content-length'))
+        request_body = json.loads(self.rfile.read(length))     
+
+        filename = request_body['filename']
+
+        print("Filename: {}\n".format(filename))
+        file_hash = HashFile(filename)
+
+        if len(file_hash) == 0:
+            print("[X] Documento '{}' não encontrado !".format(filename))
+            payload = {'error': 'Documento não encontrado'}
+
+        else:
+            print("File hash:", file_hash)
+
+            # RSA cipher
+            print("\n< RSA >")
+            public_key, private_key = Chaves_assim()
+
+            rsa_encoded = RSA_OAEP_encoder(file_hash, private_key)
+            print("\n>>> RSA_encoded: {}".format(rsa_encoded.hex()))
+            
+            payload = {
+                'doc': filename, # BYTE
+                'encoded': rsa_encoded, # HEX
+                'public_key': public_key # HEX
+            }
+
+        self._set_headers()
+        self.wfile.write(json.dumps(payload).encode())
+
 if __name__ == '__main__':
-
     numpy.set_printoptions(formatter={'int':hex})
-    
-    print("Plain text:", PLAIN_TEXT)
 
-    sha3 = hashlib.sha256()
-    sha3.update(PLAIN_TEXT.encode())
-    plain_hash = sha3.hexdigest()
-    print("Plain hash:", plain_hash, type(plain_hash), getsizeof(plain_hash))
+    # SERVIDOR
+    if argv[1] == 'server':
+        print('http server is starting...')
+        
+        # LocalHost and Port
+        server_address = ('127.0.0.1', 80)
+        httpd = HTTPServer(server_address, MyHTTPRequestHandler)  
+        print('http server is running...')  
+        httpd.serve_forever()
 
-    # RSA cipher
-    print("\n< RSA >")
-    public_key, private_key = Chaves_assim()
+    # CLIENTE
+    elif argv[1] == 'client':
+        connection = http.client.HTTPConnection('127.0.0.1', 80, timeout=10)
+        print(connection)
 
-    rsa_encoded = RSA_OAEP_encoder(plain_hash, private_key)
-    print("\n>>> RSA_encoded: {}".format(rsa_encoded.hex()))
-    
-    payload = {
-        'doc': PLAIN_TEXT, # BYTE
-        'encoded': rsa_encoded, # HEX
-        'public_key': public_key # HEX
-    }
+        filename = input("> Arquivo para assinatura: ")
 
-    input()
+        headers = {
+            'Content-type': 'application/json'
+        }
 
-    print("PAYLOAD")
-    print("Doc: {}".format(payload['doc']))
-    print("Encoded hash: {}".format(payload['encoded']))
-    print("Public key: ({}, {})".format(hex(payload['public_key'][0]), hex(payload['public_key'][1])))
-    print()
+        request_body = {
+            'filename': filename
+        }
 
-    poss_hash = RSA_OAEP_decoder(payload['encoded'], payload['public_key'])
-    sha3 = hashlib.sha256()
-    sha3.update(payload['doc'].encode())
-    hashed_doc = sha3.hexdigest()
-    print("\n>>> RSA_decoded: {}".format(poss_hash))
-    print("\n>>> Hashed doc: {}".format(hashed_doc))
-    print()
-    
-    if poss_hash == hashed_doc:
-        print("Documento é valido :)\n")
+        connection.request("POST", "/", json.dumps(request_body), headers)
+        response = connection.getresponse()
+        print("Status: {} and reason: {}".format(response.status, response.reason))
+        
+        payload = json.loads(response.read())
+
+        print(payload)
+
+        connection.close()
+
+        input()
+
+        if not payload['error']:
+            print("PAYLOAD")
+            print("Doc: {}".format(payload['doc']))
+            print("Encoded hash: {}".format(payload['encoded'].hex()))
+            print("Public key: ({}, {})".format(hex(payload['public_key'][0]), hex(payload['public_key'][1])))
+            print()
+
+            poss_hash = RSA_OAEP_decoder(payload['encoded'], payload['public_key'])
+            hashed_doc = HashFile(payload['doc'])
+            print("\n>>> RSA_decoded: {}".format(poss_hash))
+            print("\n>>> Hashed doc: {}".format(hashed_doc))
+            print()
+            
+            if poss_hash == hashed_doc:
+                print("Documento é valido :)\n")
+            else:
+                print("Documento é invalido :(\n")
+
+        # EAS cipher
+        # print("\n< AES >")   
+        # aes_key = Chave_sim(SIM_KEY_SIZE)
+        # aes_key = 'satishcjisboring'
+        # print("> key unicode:", aes_key.encode('utf-8'))
+
+        # rounds = ROUNDS[len(aes_key) * 8]
+
+        # aes_keys = Compute_keys(aes_key.encode('utf-8'), rounds)
+        # aes_encoded = AES_encoder(plain_hash, aes_keys)
+        # aes_decoded = AES_decoder(aes_encoded, aes_keys)
+
+        # print("> AES_encoded:", aes_encoded)
+        # print("> AES_decoded:", aes_decoded.decode('utf-8'))
+
+        # # base64_bytes = base64.b64encode(rsa_encoded)
+        # # print("> BASE64 encoded:", base64_bytes.decode('ascii'))
+
+        # # from_base64 = base64.b64decode(base64_bytes)
+
+        # # print("> BASE64 decoded:", from_base64)
+
     else:
-        print("Documento é invalido :(\n")
-
-    # EAS cipher
-    # print("\n< AES >")   
-    # aes_key = Chave_sim(SIM_KEY_SIZE)
-    # aes_key = 'satishcjisboring'
-    # print("> key unicode:", aes_key.encode('utf-8'))
-
-    # rounds = ROUNDS[len(aes_key) * 8]
-
-    # aes_keys = Compute_keys(aes_key.encode('utf-8'), rounds)
-    # aes_encoded = AES_encoder(plain_hash, aes_keys)
-    # aes_decoded = AES_decoder(aes_encoded, aes_keys)
-
-    # print("> AES_encoded:", aes_encoded)
-    # print("> AES_decoded:", aes_decoded.decode('utf-8'))
-
-    # # base64_bytes = base64.b64encode(rsa_encoded)
-    # # print("> BASE64 encoded:", base64_bytes.decode('ascii'))
-
-    # # from_base64 = base64.b64decode(base64_bytes)
-
-    # # print("> BASE64 decoded:", from_base64)
+        print("[X] Modo inválido (tente 'server' ou 'client')")
