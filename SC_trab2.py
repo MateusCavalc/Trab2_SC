@@ -9,6 +9,7 @@ from sys import getsizeof, argv
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import http.client
 import json
+from pathlib import Path
 
 MIN_BITSIZE = 8 # BITS
 SIM_KEY_SIZE = 16 # BYTES
@@ -550,26 +551,27 @@ def AES_decoder(encoded, keys):
 
 def HashFile(filename): # SHA3-256 (return HEX)
     sha3 = hashlib.sha256()
+    file_bytes = b''
     hashed_file = ''
 
     try:
         with open(filename, 'rb') as f:
             while True:
                 data = f.read(BUF_SIZE)
-                if not data:
-                    break
+                if not data:    break
+                file_bytes += data
                 sha3.update(data)
         
         hashed_file = sha3.hexdigest()
     except Exception as e:
         print(e)
 
-    return hashed_file
+    return file_bytes, hashed_file
 
 class MyHTTPRequestHandler(BaseHTTPRequestHandler):
     def _set_headers(self):
         self.send_response(200)
-        self.send_header('Content-type', 'application/json')
+        self.send_header('Content-type', 'application/octet-stream')
         self.end_headers()
 
     def do_HEAD(self):
@@ -583,14 +585,16 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
 
         filename = request_body['filename']
 
-        print("Filename: {}\n".format(filename))
-        file_hash = HashFile(filename)
+        print("Filename: {} ({})\n".format(filename, type(filename)))
+
+        file_bytes, file_hash = HashFile(filename)
 
         if len(file_hash) == 0:
             print("[X] Documento '{}' não encontrado !".format(filename))
             payload = {'error': 'Documento não encontrado'}
 
         else:
+            # self.send_header('Content-Disposition', 'attachment; filename=\"' + filename + '\"')
             print("File hash:", file_hash)
 
             # RSA cipher
@@ -601,8 +605,8 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
             print("\n>>> RSA_encoded: {}".format(rsa_encoded.hex()))
             
             payload = {
-                'doc': filename, # BYTE
-                'encoded': rsa_encoded, # HEX
+                'doc': file_bytes.hex(), # HEX
+                'encoded': rsa_encoded.hex(), # HEX
                 'public_key': public_key # HEX
             }
 
@@ -639,25 +643,27 @@ if __name__ == '__main__':
 
         connection.request("POST", "/", json.dumps(request_body), headers)
         response = connection.getresponse()
-        print("Status: {} and reason: {}".format(response.status, response.reason))
+        print(response)
         
         payload = json.loads(response.read())
-
-        print(payload)
 
         connection.close()
 
         input()
 
-        if not payload['error']:
+        if 'error' not in payload:
             print("PAYLOAD")
-            print("Doc: {}".format(payload['doc']))
-            print("Encoded hash: {}".format(payload['encoded'].hex()))
+            print("Doc: {}".format(len(payload['doc'])))
+            print("Encoded hash: {}".format(payload['encoded']))
             print("Public key: ({}, {})".format(hex(payload['public_key'][0]), hex(payload['public_key'][1])))
             print()
 
-            poss_hash = RSA_OAEP_decoder(payload['encoded'], payload['public_key'])
-            hashed_doc = HashFile(payload['doc'])
+            payload_doc = payload['doc']
+            payload_encoded = bytes.fromhex(payload['encoded'])
+            payload_pkey = (int(payload['public_key'][0]), int(payload['public_key'][1]))
+
+            poss_hash = RSA_OAEP_decoder(payload_encoded, payload_pkey)
+            _, hashed_doc = HashFile(payload_doc)
             print("\n>>> RSA_decoded: {}".format(poss_hash))
             print("\n>>> Hashed doc: {}".format(hashed_doc))
             print()
