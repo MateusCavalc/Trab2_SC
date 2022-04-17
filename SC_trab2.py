@@ -10,8 +10,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import http.client
 import json
 from pathlib import Path
+import RabinMiller
 
-MIN_BITSIZE = 8 # BITS
+MIN_BITSIZE = 1024 # BITS
 SIM_KEY_SIZE = 16 # BYTES
 KEY_CHARS = string.ascii_uppercase + string.digits # CHARS TO BUILD SIM KEYS
 EAS_128 = 128
@@ -20,12 +21,10 @@ EAS_256 = 256
 
 BUF_SIZE = 65536  # lets read stuff in 64kb chunks!
 
-MAX_BLOCK_SIZE = 30
-OAEP_M_SIZE = 32
-OAEP_K_SIZE = 80
-
-OAEP_BPEC = 2 # OAEP BYTES PER ENCODED CHAR
-OAEP_BPEB = 104 # OAPE BYTES PER ENCODED BLOCK
+OAEP_M_SIZE = 64 # OAEP PADDED PLAIN MESSAGE SIZE IN BYTES
+OAEP_P_SIZE = 84 # OAEP 'P' SIZE IN BYTES
+OAEP_BPEC = 256 # OAEP BYTES PER ENCODED CHAR
+OAEP_BPEB = OAEP_BPEC * 52 # OAPE BYTES PER ENCODED BLOCK
 
 aes_sbox = [
     [int('63', 16), int('7c', 16), int('77', 16), int('7b', 16), int('f2', 16), int('6b', 16), int('6f', 16), int('c5', 16), int(
@@ -114,8 +113,6 @@ INV_GALOIS_FIELD = numpy.array([[14, 11, 13, 9],
 
 ROUNDS = {EAS_128:10, EAS_192:12, EAS_256:14}
 
-PLAIN_TEXT = "Documento secreto"
-
 def AddPadding(block):
     M = copy.deepcopy(block)
     while len(M) < OAEP_M_SIZE:
@@ -178,6 +175,27 @@ def mat_mult(a, b):
 
     return result
 
+def findModInverse(a, m):
+    # Returns the modular inverse of a % m, which is
+    # the number x such that a*x % m = 1
+
+    def gcd(a, b):
+        # Return the GCD of a and b using Euclid's Algorithm
+        while a != 0:
+            a, b = b % a, a
+        return b
+
+    if gcd(a, m) != 1:
+        return None # no mod inverse if a & m aren't relatively prime
+
+    # Calculate using the Extended Euclidean Algorithm:
+    u1, u2, u3 = 1, 0, a
+    v1, v2, v3 = 0, 1, m
+    while v3 != 0:
+        q = u3 // v3 # // is the integer division operator
+        v1, v2, v3, u1, u2, u3 = (u1 - q * v1), (u2 - q * v2), (u3 - q * v3), v1, v2, v3
+    return u1 % m
+
 def MDC(a, b):
     
     while(b != 0):
@@ -187,153 +205,110 @@ def MDC(a, b):
 
     return a
 
-def Get_N_and_E(bitsize):
-    p = number.getPrime(bitsize)
-    q = number.getPrime(bitsize)
+def Get_N_and_E():
+    p = RabinMiller.generateLargePrime(MIN_BITSIZE)
+    q = RabinMiller.generateLargePrime(MIN_BITSIZE)
+
+    print('done')
     
     N = p * q
 
     Pn = (p-1) * (q-1)
     
     while True:
-        E = random.randrange(2, Pn + 1)
-        
-        if not MDC(Pn, E) == 1: continue
-        else:   break
+        E = random.randrange(2 ** (MIN_BITSIZE - 1), 2 ** (MIN_BITSIZE))
+        if MDC(Pn, E) == 1: break
     
     return N, E, Pn
 
-def Get_D(E, Pn):
-    D = 0
-    
-    while True:
-        D += 1
-        if (E * D) % Pn == 1:
-            return D
-        
-def RSA_OAEP_encoder(plain, private_key):
-    print('\n[RSA_OAEP] Encoding \'{}\' with private key ({}, {}) ...\n'.format(plain, hex(private_key[0]), hex(private_key[1])))
+def byte_length(i):
+    return (i.bit_length() + 7) // 8
 
-    enc = b''
+def RSA_OAEP_encoder(plain, private_key): # Return plain encoded BASE64
+    print('\n[RSA_OAEP] Encoding \'{}\' with private key ({}, {}) ...\n'.format(plain, hex(private_key[0]), hex(private_key[1])))
 
     E = private_key[0]
     N = private_key[1]
 
-    plain_blocks = []
-    block = ''
-
-    for char in plain:
-        block += char
-        if len(block) >= MAX_BLOCK_SIZE:
-            plain_blocks.append(copy.deepcopy(block))
-            block = ''
-
-    if len(block) > 0:
-        plain_blocks.append(copy.deepcopy(block))
-
-    # print("blocks:", plain_blocks)
-
-    sha256 = hashlib.sha256()
+    sha512 = hashlib.sha3_512()
     r = numpy.random.randint(2, size=(20,))
     r = bytes(r.tolist())
     # print("r:", r, len(r))
-    sha256.update(r)
-    G = sha256.digest()
+    sha512.update(r)
+    G = sha512.digest() # G = 64 bytes
     # print("hashed_r:", G.hex())
         
-    for block in plain_blocks:
-        sha1 = hashlib.sha1()
-        M = AddPadding(block)
-        # print("M:", M)
-        P1 = xor(M.encode(), G)
-        sha1.update(P1)
-        H = sha1.digest()
-        P2 = xor(r, H)
-        # print("G:", G.hex(), len(G))
-        # print("H:", H.hex(), len(H))
-        # print("P1:", P1.hex(), len(P1))
-        # print("P2:", P2.hex(), len(P2))
-        P = P1 + P2
-        # print("P:", P.hex(), len(P))
-    
-        for b in P:
-            enc_b = (b ** E) % N
-            # print(hex(b), hex(enc_b))
-            # print(enc_b.to_bytes(2, byteorder='big'))
-            enc += enc_b.to_bytes(2, byteorder='big')
+    sha1 = hashlib.sha1()
+    M = AddPadding(plain) # M = 64 bytes
+    # print("M:", M)
+    P1 = xor(M.encode(), G)
+    sha1.update(P1)
+    H = sha1.digest() # H = 20 bytes
+    P2 = xor(r, H) # P2 = 20 bytes
+    # print("G:", G.hex(), len(G))
+    # print("H:", H.hex(), len(H))
+    # print("P1:", P1.hex(), len(P1))
+    # print("P2:", P2.hex(), len(P2))
+    P = P1 + P2 # P = 84 BYTES
 
-        sha1 = hashlib.sha1()
-        
-    return enc
+    enc_P = pow(int.from_bytes(P, byteorder='big'), E, N)
+    # print('P: {} {}'.format(P.hex(), len(P)))
+    # print('enc_P: {} {}'.format(hex(enc_P), byte_length(enc_P)))
+    # print(enc_b.to_bytes(2, byteorder='big'))
+    enc_bytes = enc_P.to_bytes(OAEP_BPEC, byteorder='big')
+    base64_enc = base64.b64encode(enc_bytes)
+    # print("> BASE64 encoded:", base64_enc.decode('ascii'))
+
+    return  base64_enc.decode('ascii')
     
-def RSA_OAEP_decoder(encoded, public_key):
-    print('\n[RSA_OAEP] Decoding \'{}\' with public key ({}, {}) ...\n'.format(encoded.hex(), hex(public_key[0]), hex(public_key[1])))
+def RSA_OAEP_decoder(encoded_base64, public_key): # Input encoded BASE64
+    print('\n[RSA_OAEP] Decoding \'{}\' with public key ({}, {}) ...\n'.format(encoded_base64, hex(public_key[0]), hex(public_key[1])))
 
     dec = b''
 
     D = public_key[0]
     N = public_key[1]
-    
-    enc_blocks = []
-    block = []
-
-    for b in encoded:
-        block.append(b)
-        if len(block) >= OAEP_BPEB:
-            enc_blocks.append(copy.deepcopy(block))
-            block = []
-
-    if len(block) > 0:
-        enc_blocks.append(copy.deepcopy(block))
-
-    # print("Encoded blocks:", enc_blocks)
         
-    for block in enc_blocks:
-        P = b''
-        sha1 = hashlib.sha1()
-        sha256 = hashlib.sha256()
+    sha1 = hashlib.sha1()
+    sha512 = hashlib.sha3_512()
 
-        for i in range(0, len(block), 2):
-            # print(block[i], block[i+1])
-            # print(block[i].to_bytes(1, byteorder='big'), block[i+1].to_bytes(1, byteorder='big'), block[i].to_bytes(1, byteorder='big') + block[i+1].to_bytes(1, byteorder='big'))
-            b = block[i].to_bytes(1, byteorder='big') + block[i+1].to_bytes(1, byteorder='big')
-            enc_b = (int.from_bytes(b, byteorder='big') ** D) % N
-            # print(b.hex(), hex(enc_b))
-            P += enc_b.to_bytes(1, byteorder='big')
+    encoded_bytes = base64.b64decode(encoded_base64.encode('ascii'))
+    decoded_P = pow(int.from_bytes(encoded_bytes, byteorder='big'), D, N)
+    P = decoded_P.to_bytes(OAEP_P_SIZE, byteorder='big')
 
-        # print("P:", P.hex(), len(P))
+    # print('P: {} {}'.format(P.hex(), len(P)))
 
-        P1 = P[:OAEP_M_SIZE]
-        P2 = P[OAEP_M_SIZE:]
+    P1 = P[:OAEP_M_SIZE]
+    P2 = P[OAEP_M_SIZE:]
 
-        sha1.update(P1)
-        H = sha1.digest()
-        r = xor(P2, H)
-        # print("r(?):", r)
-        sha256.update(r)
-        G = sha256.digest()
+    sha1.update(P1)
+    H = sha1.digest()
+    r = xor(P2, H)
+    # print("r(?):", r)
+    sha512.update(r)
+    G = sha512.digest()
 
-        # print("G:", G.hex(), len(G))
-        # print("H:", H.hex(), len(H))
-        # print("P1:", P1.hex(), len(P1))
-        # print("P2:", P2.hex(), len(P2))
+    # print("G:", G.hex(), len(G))
+    # print("H:", H.hex(), len(H))
+    # print("P1:", P1.hex(), len(P1))
+    # print("P2:", P2.hex(), len(P2))
 
-        M = xor(P1, G)
-        dec += M.rstrip(b'\x00')
+    M = xor(P1, G)
+    dec += M.rstrip(b'\x00')
         
     return dec.decode()
 
 def Chaves_assim():
-    N, E, Pn = Get_N_and_E(MIN_BITSIZE)
-    D = Get_D(E, Pn)
+    N, E, Pn = Get_N_and_E()
+    print('N = {}'.format(hex(N)))
+    print('E = {}'.format(hex(E)))
+    
+    D = findModInverse(E, Pn)
+    print('D = {}'.format(hex(D)))
 
     public_key = (E, N)
     private_key = (D, N)
-    
-    print('N = {}'.format(hex(N)))
-    print('E = {}'.format(hex(E)))
-    print('D = {}'.format(hex(D)))
-    
+        
     return public_key, private_key
 
 def Chave_sim(size_bytes):
@@ -549,19 +524,22 @@ def AES_decoder(encoded, keys):
         
     return decoded.rstrip(b'\x00')
 
-def HashFile(filename): # SHA3-256 (return HEX)
-    sha3 = hashlib.sha256()
+def DoHash(toHash, fromFile=False): # SHA3-256 (return HEX)
+    sha3 = hashlib.sha3_256()
     file_bytes = b''
     hashed_file = ''
 
     try:
-        with open(filename, 'rb') as f:
-            while True:
-                data = f.read(BUF_SIZE)
-                if not data:    break
-                file_bytes += data
-                sha3.update(data)
-        
+        if fromFile:
+            with open(toHash, 'rb') as f:
+                while True:
+                    data = f.read(BUF_SIZE)
+                    if not data:    break
+                    file_bytes += data
+                    sha3.update(data)
+        else:
+            sha3.update(toHash)
+
         hashed_file = sha3.hexdigest()
     except Exception as e:
         print(e)
@@ -587,7 +565,7 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
 
         print("Filename: {} ({})\n".format(filename, type(filename)))
 
-        file_bytes, file_hash = HashFile(filename)
+        file_bytes, file_hash = DoHash(filename, fromFile=True)
 
         if len(file_hash) == 0:
             print("[X] Documento '{}' não encontrado !".format(filename))
@@ -601,12 +579,12 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
             print("\n< RSA >")
             public_key, private_key = Chaves_assim()
 
-            rsa_encoded = RSA_OAEP_encoder(file_hash, private_key)
-            print("\n>>> RSA_encoded: {}".format(rsa_encoded.hex()))
+            rsa_encoded = RSA_OAEP_encoder(file_hash, private_key) # BASE64
+            print(">>> Digital Signature (BASE64): {}\n".format(rsa_encoded))
             
             payload = {
                 'doc': file_bytes.hex(), # HEX
-                'encoded': rsa_encoded.hex(), # HEX
+                'dig_sig': rsa_encoded, # BASE64
                 'public_key': public_key # HEX
             }
 
@@ -628,8 +606,7 @@ if __name__ == '__main__':
 
     # CLIENTE
     elif argv[1] == 'client':
-        connection = http.client.HTTPConnection('127.0.0.1', 80, timeout=10)
-        print(connection)
+        connection = http.client.HTTPConnection('127.0.0.1', 80, timeout=60)
 
         filename = input("> Arquivo para assinatura: ")
 
@@ -642,37 +619,39 @@ if __name__ == '__main__':
         }
 
         connection.request("POST", "/", json.dumps(request_body), headers)
+        print(' [...] Aguardando documento ...')
         response = connection.getresponse()
-        print(response)
         
         payload = json.loads(response.read())
 
         connection.close()
 
-        input()
-
         if 'error' not in payload:
+            print("\n------------------------------------------------------------")
             print("PAYLOAD")
-            print("Doc: {}".format(len(payload['doc'])))
-            print("Encoded hash: {}".format(payload['encoded']))
+            print("Doc length: {} bytes".format(len(payload['doc'])))
+            print("Digital signature (BASE64): {}".format(payload['dig_sig']))
             print("Public key: ({}, {})".format(hex(payload['public_key'][0]), hex(payload['public_key'][1])))
-            print()
+            print("------------------------------------------------------------")
 
-            payload_doc = payload['doc']
-            payload_encoded = bytes.fromhex(payload['encoded'])
+            payload_doc = bytes.fromhex(payload['doc'])
+            payload_encoded_base64 = payload['dig_sig']
             payload_pkey = (int(payload['public_key'][0]), int(payload['public_key'][1]))
 
-            poss_hash = RSA_OAEP_decoder(payload_encoded, payload_pkey)
-            _, hashed_doc = HashFile(payload_doc)
-            print("\n>>> RSA_decoded: {}".format(poss_hash))
-            print("\n>>> Hashed doc: {}".format(hashed_doc))
-            print()
+            target_hash = RSA_OAEP_decoder(payload_encoded_base64, payload_pkey)
+            _, doc_hash = DoHash(payload_doc)
+            print("\n>>> Desired doc  (hash): {}".format(target_hash))
+            print(">>> Received doc (hash): {}\n".format(doc_hash))
             
-            if poss_hash == hashed_doc:
-                print("Documento é valido :)\n")
+            if target_hash == doc_hash:
+                print(" [#] Documento é valido :)")
+                with open('E:/Users/droto/Desktop/Trab2_SC/docs_validos/' + filename.split("/", 1)[1], 'wb') as f:
+                    data = f.write(payload_doc)
             else:
-                print("Documento é invalido :(\n")
-
+                print(" [X] Documento é invalido :(")
+        
+        else:
+            print(" [!] Não foi possível encontrar o documento '{}'".format(filename))
         # EAS cipher
         # print("\n< AES >")   
         # aes_key = Chave_sim(SIM_KEY_SIZE)
