@@ -111,26 +111,27 @@ if __name__ == '__main__':
 
     elif argv[1] == 'aes':
         # EAS cipher
-        print("\n< AES >")
+        print("\n< AES CTR (Counter) >")
         plain = 'mensagem secreta'
         aes_key = AES.Generate_Key(SIM_KEY_SIZE)
+        nonce = random.getrandbits(64)
+        print("> Plain:", plain)
         print("> key:", aes_key)
+        print("> Nonce: {:064b}".format(nonce))
 
-        rounds = ROUNDS[len(aes_key) * 8]
-
-        aes_key_blocks = AES.ComputeKeyBlocks(aes_key.encode('utf-8'), rounds)
-        aes_encoded = AES.AES_encoder(plain, aes_key_blocks)
-        print("> AES_encoded (HEX):", aes_encoded.hex(':'))
-        
-        aes_decoded = AES.AES_decoder(aes_encoded, aes_key_blocks)
-        print("> AES_decoded:", aes_decoded.decode('utf-8'))
-
-        # base64_bytes = base64.b64encode(rsa_encoded)
-        # print("> BASE64 encoded:", base64_bytes.decode('ascii'))
-
-        # from_base64 = base64.b64decode(base64_bytes)
-
-        # print("> BASE64 decoded:", from_base64)
+        try:
+            aes_ctr = AES_CTR()
+            # aes_ctr.ComputeKeyBlocks(aes_key)
+            # aes_ctr.SetNonce(nonce)
+            encoded = aes_ctr.Encode(plain)
+            print("> AES CTR encoded (HEX):", encoded.hex(':'))
+            
+            decoded = aes_ctr.Decode(encoded, nonce)
+            print("> AES CTR decoded:", aes_decoded.decode('utf-8'))
+        except NoKeyBlocks:
+            print("\n [X] Os blocos de chaves não foram computados.\n")
+        except NoNonce:
+            print("\n [X] Nonce não definido.\n")
 
     else:
         print("[X] Modo inválido (tente 'server' ou 'client')")

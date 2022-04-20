@@ -462,7 +462,7 @@ class AES():
         return ''.join(random.choice(KEY_CHARS) for _ in range(size_bytes))
 
     @classmethod
-    def AES_encoder(self, plain, keys):
+    def Encode(self, plain, keys):
         encoded = b''
         state = numpy.zeros(shape=(4, 4), dtype='<u1')
         plain_offset = 0
@@ -509,7 +509,7 @@ class AES():
         return encoded
 
     @classmethod
-    def AES_decoder(self, encoded, keys):
+    def Decode(self, encoded, keys):
         decoded = b''
         state = numpy.zeros(shape=(4, 4), dtype='<u1')
         enc_offset = 0
@@ -553,3 +553,32 @@ class AES():
             state.fill(0)
             
         return decoded.rstrip(b'\x00')
+
+class AES_CTR():
+    # Constructor
+    def __init__(self):
+        self.keyBlocks = None
+        self.nonce = None
+
+    def ComputeKeyBlocks(self, key):
+        rounds = ROUNDS[len(key) * 8]
+        self.keyBlocks = AES.ComputeKeyBlocks(key.encode('utf-8'), rounds)
+
+    def SetNonce(self, nonce):
+        self.nonce = nonce
+
+    def Encode(self, plain):
+        if self.keyBlocks is None:  raise NoKeyBlocks
+        elif self.nonce is None:  raise NoNonce
+            
+        # TODO
+
+    @staticmethod
+    def Decode(encoded): # TODO
+        pass
+
+class NoKeyBlocks(Exception):
+    pass
+
+class NoNonce(Exception):
+    pass
