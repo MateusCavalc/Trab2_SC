@@ -112,22 +112,23 @@ if __name__ == '__main__':
     elif argv[1] == 'aes':
         # EAS cipher
         print("\n< AES CTR (Counter) >")
-        plain = 'mensagem secreta'
+        plain = input("> Enter string message to encrypt: ")
         aes_key = AES.Generate_Key(SIM_KEY_SIZE)
         nonce = random.getrandbits(64)
-        print("> Plain:", plain)
+        print("\n> Plain:", plain)
         print("> key:", aes_key)
-        print("> Nonce: {:064b}".format(nonce))
+        print("> Random generated Nonce: {:064b}\n".format(nonce))
 
         try:
             aes_ctr = AES_CTR()
-            # aes_ctr.ComputeKeyBlocks(aes_key)
-            # aes_ctr.SetNonce(nonce)
+            aes_ctr.ComputeKeyBlocks(aes_key)
+            aes_ctr.SetNonce(nonce.to_bytes(8, byteorder='big'))
+
             encoded = aes_ctr.Encode(plain)
             print("> AES CTR encoded (HEX):", encoded.hex(':'))
             
-            decoded = aes_ctr.Decode(encoded, nonce)
-            print("> AES CTR decoded:", aes_decoded.decode('utf-8'))
+            decoded = aes_ctr.Decode(encoded)
+            print("> AES CTR decoded:", decoded)
         except NoKeyBlocks:
             print("\n [X] Os blocos de chaves não foram computados.\n")
         except NoNonce:

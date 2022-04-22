@@ -474,14 +474,13 @@ class AES():
             for j in range(0, 4):
                 for i in range(0, 4):
                     if plain_offset + offset_adder < len(plain):
-                        state[i][j] = ord(plain[plain_offset + offset_adder])
+                        state[i][j] = plain[plain_offset + offset_adder]
                         offset_adder += 1
                     else:
                         break
                 
             plain_offset += offset_adder
 
-            blocks = []
             round_count = 1
 
             key_state = keys[0]
@@ -570,12 +569,72 @@ class AES_CTR():
     def Encode(self, plain):
         if self.keyBlocks is None:  raise NoKeyBlocks
         elif self.nonce is None:  raise NoNonce
-            
-        # TODO
 
-    @staticmethod
-    def Decode(encoded): # TODO
-        pass
+        encoded = b''
+        plain_state = b''
+        plain_offset = 0
+        counter = 0 # Counter used with nonce
+        
+        while plain_offset < len(plain):
+            offset_adder = 0
+
+            while offset_adder < 16:
+                # fill plain_state with 16 characters from plain text
+                if plain_offset + offset_adder < len(plain):
+                    plain_state += bytes(plain[plain_offset + offset_adder], 'utf-8')
+                    offset_adder += 1
+                else:
+                    break
+
+            if len(plain_state) < 16:
+                while len(plain_state) < 16:
+                    plain_state += b'\x00'
+                
+            plain_offset += offset_adder
+
+            to_AES = self.nonce + counter.to_bytes(8, byteorder='big') # to_aes 128 bits
+            
+            enc_counter = AES.Encode(to_AES, self.keyBlocks)
+            
+            encoded += xor(enc_counter, plain_state)
+                        
+            plain_state = b''
+
+        return encoded
+
+    def Decode(self, encoded):
+        if self.keyBlocks is None:  raise NoKeyBlocks
+        elif self.nonce is None:  raise NoNonce
+
+        plain = b''
+        encoded_state = b''
+        encoded_offset = 0
+        counter = 0 # Counter used with nonce
+        
+        while encoded_offset < len(encoded):
+            offset_adder = 0
+
+            while offset_adder < 16:
+                # fill encoded_state with 16 characters from encoded text
+                if encoded_offset + offset_adder < len(encoded):
+                    encoded_state += encoded[encoded_offset + offset_adder].to_bytes(1, byteorder='big')
+                    offset_adder += 1
+                else:
+                    break
+                
+            encoded_offset += offset_adder
+
+            to_AES = self.nonce + counter.to_bytes(8, byteorder='big') # to_aes 128 bits
+            
+            enc_counter = AES.Encode(to_AES, self.keyBlocks)
+            
+            plain += xor(enc_counter, encoded_state)
+                        
+            encoded_state = b''
+
+        return plain.rstrip(b'\x00').decode()
+
+
 
 class NoKeyBlocks(Exception):
     pass
