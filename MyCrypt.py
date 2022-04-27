@@ -566,7 +566,7 @@ class AES_CTR():
     def SetNonce(self, nonce):
         self.nonce = nonce
 
-    def Encode(self, plain):
+    def Encode(self, plain=None, filename=None):
         if self.keyBlocks is None:  raise NoKeyBlocks
         elif self.nonce is None:  raise NoNonce
 
@@ -574,31 +574,54 @@ class AES_CTR():
         plain_state = b''
         plain_offset = 0
         counter = 0 # Counter used with nonce
-        
-        while plain_offset < len(plain):
-            offset_adder = 0
 
-            while offset_adder < 16:
-                # fill plain_state with 16 characters from plain text
-                if plain_offset + offset_adder < len(plain):
-                    plain_state += bytes(plain[plain_offset + offset_adder], 'utf-8')
-                    offset_adder += 1
-                else:
-                    break
+        if plain: # Codifica mensagem plain
+            while plain_offset < len(plain):
+                offset_adder = 0
 
-            if len(plain_state) < 16:
-                while len(plain_state) < 16:
-                    plain_state += b'\x00'
-                
-            plain_offset += offset_adder
+                while offset_adder < 16:
+                    # fill plain_state with 16 characters from plain text
+                    if plain_offset + offset_adder < len(plain):
+                        plain_state += bytes(plain[plain_offset + offset_adder], 'utf-8')
+                        offset_adder += 1
+                    else:
+                        break
 
-            to_AES = self.nonce + counter.to_bytes(8, byteorder='big') # to_aes 128 bits
-            
-            enc_counter = AES.Encode(to_AES, self.keyBlocks)
-            
-            encoded += xor(enc_counter, plain_state)
-                        
-            plain_state = b''
+                if len(plain_state) < 16:
+                    while len(plain_state) < 16:
+                        plain_state += b'\x00'
+                    
+                plain_offset += offset_adder
+
+                to_AES = self.nonce + counter.to_bytes(8, byteorder='big') # to_aes 128 bits
+                enc_counter = AES.Encode(to_AES, self.keyBlocks)
+                encoded += xor(enc_counter, plain_state)
+                counter += 1       
+                plain_state = b''
+
+        elif filename: # Codifica arquivo
+            data = None
+            try:
+                with open(filename, 'rb') as f:
+                    while True:
+                        while len(file_bytes) < 16:
+                            data = f.read(BUF_SIZE)
+                            if not data:    break
+                            plain_state += data
+
+                        if len(plain_state) < 16:
+                            while len(plain_state) < 16:
+                                plain_state += b'\x00'
+
+                        to_AES = self.nonce + counter.to_bytes(8, byteorder='big') # to_aes 128 bits
+                        enc_counter = AES.Encode(to_AES, self.keyBlocks)
+                        encoded += xor(enc_counter, plain_state)
+                        if not data:    break
+                        counter += 1
+                        plain_state = b''
+
+            except Exception as e:
+                print(e)
 
         return encoded
 

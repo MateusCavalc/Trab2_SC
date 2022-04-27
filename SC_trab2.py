@@ -4,6 +4,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import http.client
 import json
 
+FROM_RAW = 1
+FROM_FILE = 2
+
 def Server():
     print('http server is starting...')
     server_address = ('127.0.0.1', 80)
@@ -11,17 +14,15 @@ def Server():
     print('http server is running...')
     httpd.serve_forever()
 
-def Client():
+def Client(mode):
     connection = http.client.HTTPConnection('127.0.0.1', 80, timeout=60)
 
-    filename = input("> Arquivo para assinatura: ")
-
-    headers = {
-        'Content-type': 'application/json'
-    }
-    request_body = {
-        'filename': filename
-    }
+    headers = {'Content-type': 'application/json'}
+    request_body = {'mode': mode}
+    
+    if mode == FROM_FILE:
+        filename = input("> Arquivo para assinatura: ")
+        request_body['filename'] = filename
 
     connection.request("POST", "/", json.dumps(request_body), headers)
 
@@ -70,11 +71,11 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
     #handle GET command  
     def do_POST(self):
         length = int(self.headers.get('content-length'))
-        request_body = json.loads(self.rfile.read(length))     
+        request_body = json.loads(self.rfile.read(length)) 
 
-        filename = request_body['filename']
-
-        print("Filename: {} ({})\n".format(filename, type(filename)))
+        if request_body['mode'] == FROM_FILE
+            filename = request_body['filename']
+            print("Filename: {} \n".format(filename))
 
         file_bytes, file_hash = RSA_OAEP.DoHash(filename, fromFile=True)
 
@@ -91,6 +92,30 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
 
             rsa_encoded = RSA_OAEP.RSA_OAEP_encoder(file_hash, private_key) # BASE64
             print(">>> Digital Signature (BASE64): {}\n".format(rsa_encoded))
+
+            # AES cipher
+            print("\n< AES CTR (Counter) >")
+            plain = input("> Enter string message to encrypt: ")
+            aes_key = AES.Generate_Key(SIM_KEY_SIZE)
+            nonce = random.getrandbits(64)
+            print("\n> Plain:", plain)
+            print("> key:", aes_key)
+            print("> Random generated Nonce: {:064b}\n".format(nonce))
+
+            try:
+                aes_ctr = AES_CTR()
+                aes_ctr.ComputeKeyBlocks(aes_key)
+                aes_ctr.SetNonce(nonce.to_bytes(8, byteorder='big'))
+
+                encoded = aes_ctr.Encode(plain=plain)
+                print("> AES CTR encoded (HEX):", encoded.hex(':'))
+                
+                decoded = aes_ctr.Decode(encoded)
+                print("> AES CTR decoded:", decoded)
+            except NoKeyBlocks:
+                print("\n [X] Os blocos de chaves não foram computados.\n")
+            except NoNonce:
+                print("\n [X] Nonce não definido.\n")
             
             payload = {
                 'doc': file_bytes.hex(), # HEX
@@ -103,36 +128,20 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
 
 if __name__ == '__main__':
     
-    if argv[1] == 'server':
-        Server() # SERVIDOR
+    if len(argv) > 1:
+        if argv[1] == 'server':
+            Server() # SERVIDOR
+        
+        elif argv[1] == 'client':
+            if argv[2] == '--file':
+                Client(FROM_FILE)
+            elif argv[2] == '--raw':
+                Client(FROM_RAW)
+            else:
+                print("[X] Modo de assinatura inválida (tente '--file' ou '--raw')")
+
+        else:
+            print("[X] Modo inválido (tente 'server' ou 'client')")
     
-    elif argv[1] == 'client':
-        Client() # CLIENTE
-
-    elif argv[1] == 'aes':
-        # EAS cipher
-        print("\n< AES CTR (Counter) >")
-        plain = input("> Enter string message to encrypt: ")
-        aes_key = AES.Generate_Key(SIM_KEY_SIZE)
-        nonce = random.getrandbits(64)
-        print("\n> Plain:", plain)
-        print("> key:", aes_key)
-        print("> Random generated Nonce: {:064b}\n".format(nonce))
-
-        try:
-            aes_ctr = AES_CTR()
-            aes_ctr.ComputeKeyBlocks(aes_key)
-            aes_ctr.SetNonce(nonce.to_bytes(8, byteorder='big'))
-
-            encoded = aes_ctr.Encode(plain)
-            print("> AES CTR encoded (HEX):", encoded.hex(':'))
-            
-            decoded = aes_ctr.Decode(encoded)
-            print("> AES CTR decoded:", decoded)
-        except NoKeyBlocks:
-            print("\n [X] Os blocos de chaves não foram computados.\n")
-        except NoNonce:
-            print("\n [X] Nonce não definido.\n")
-
     else:
-        print("[X] Modo inválido (tente 'server' ou 'client')")
+        print("[X] Nenhum modo especificado (tente 'server' ou 'client')")
