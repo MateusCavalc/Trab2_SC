@@ -110,21 +110,18 @@ ROUNDS = {EAS_128:10, EAS_192:12, EAS_256:14}
 def AddPadding(block):
     M = copy.deepcopy(block)
     while len(M) < OAEP_M_SIZE:
-        M += chr(0x00)
+        M += b'\x00'
 
     return M
 
 def xor(a, b):
     result = b''
-    # print("a:", a, len(a))
-    # print("b:", b.hex(), len(b))
 
     for a_byte, b_byte in zip(a, b):
-        # print(hex(a_byte), hex(b_byte), hex(a_byte ^ b_byte))
         try:   
             result += (a_byte ^ b_byte).to_bytes(1, byteorder='little')
-        except:
-            result += (a_byte ^ b_byte).item().to_bytes(1, byteorder='little')
+        except Exception as e:
+            print(e)
 
     return result
 
@@ -224,7 +221,7 @@ class RSA_OAEP():
         except Exception as e:
             print(e)
 
-        return file_bytes, hashed_file
+        return hashed_file
 
     @classmethod
     def Get_N_and_E(self, key_size):
@@ -258,8 +255,8 @@ class RSA_OAEP():
         return public_key, private_key
 
     @staticmethod
-    def RSA_OAEP_encoder(plain, private_key): # Return plain encoded BASE64
-        print('\n[RSA_OAEP] Encoding \'{}\' with private key ({}, {}) ...\n'.format(plain, hex(private_key[0]), hex(private_key[1])))
+    def RSA_OAEP_encoder(plain_bytes, private_key): # Return plain_bytes encoded BASE64
+        # print('\n[RSA_OAEP] Encoding \'{}\' with private key ({}, {}) ...\n'.format(plain_bytes, hex(private_key[0]), hex(private_key[1])))
 
         E = private_key[0]
         N = private_key[1]
@@ -267,37 +264,26 @@ class RSA_OAEP():
         sha512 = hashlib.sha3_512()
         r = numpy.random.randint(2, size=(20,))
         r = bytes(r.tolist())
-        # print("r:", r, len(r))
         sha512.update(r)
         G = sha512.digest() # G = 64 bytes
-        # print("hashed_r:", G.hex())
             
         sha1 = hashlib.sha1()
-        M = AddPadding(plain) # M = 64 bytes
-        # print("M:", M)
-        P1 = xor(M.encode(), G)
+        M = AddPadding(plain_bytes) # M = 64 bytes
+        P1 = xor(M, G)
         sha1.update(P1)
         H = sha1.digest() # H = 20 bytes
         P2 = xor(r, H) # P2 = 20 bytes
-        # print("G:", G.hex(), len(G))
-        # print("H:", H.hex(), len(H))
-        # print("P1:", P1.hex(), len(P1))
-        # print("P2:", P2.hex(), len(P2))
         P = P1 + P2 # P = 84 BYTES
 
         enc_P = pow(int.from_bytes(P, byteorder='big'), E, N)
-        # print('P: {} {}'.format(P.hex(), len(P)))
-        # print('enc_P: {} {}'.format(hex(enc_P), byte_length(enc_P)))
-        # print(enc_b.to_bytes(2, byteorder='big'))
         enc_bytes = enc_P.to_bytes(OAEP_BPEC, byteorder='big')
         base64_enc = base64.b64encode(enc_bytes)
-        # print("> BASE64 encoded:", base64_enc.decode('ascii'))
 
         return  base64_enc.decode('ascii')
 
     @staticmethod
     def RSA_OAEP_decoder(encoded_base64, public_key): # Input encoded BASE64
-        print('\n[RSA_OAEP] Decoding \'{}\' with public key ({}, {}) ...\n'.format(encoded_base64, hex(public_key[0]), hex(public_key[1])))
+        # print('\n[RSA_OAEP] Decoding \'{}\' with public key ({}, {}) ...\n'.format(encoded_base64, hex(public_key[0]), hex(public_key[1])))
 
         dec = b''
 
@@ -311,27 +297,19 @@ class RSA_OAEP():
         decoded_P = pow(int.from_bytes(encoded_bytes, byteorder='big'), D, N)
         P = decoded_P.to_bytes(OAEP_P_SIZE, byteorder='big')
 
-        # print('P: {} {}'.format(P.hex(), len(P)))
-
         P1 = P[:OAEP_M_SIZE]
         P2 = P[OAEP_M_SIZE:]
 
         sha1.update(P1)
         H = sha1.digest()
         r = xor(P2, H)
-        # print("r(?):", r)
         sha512.update(r)
         G = sha512.digest()
-
-        # print("G:", G.hex(), len(G))
-        # print("H:", H.hex(), len(H))
-        # print("P1:", P1.hex(), len(P1))
-        # print("P2:", P2.hex(), len(P2))
 
         M = xor(P1, G)
         dec += M.rstrip(b'\x00')
             
-        return dec.decode()
+        return dec # Return bytes !
 
 class AES():
     @classmethod
@@ -341,7 +319,6 @@ class AES():
         for j in range(0, 4):
             mapped_j = ((j - 1) + 4) % 4
                 
-            # print('{} mapped to {}'.format(j, mapped_j))
             aux_array[mapped_j] = word[j]
             
         for j in range(0, 4):
@@ -364,13 +341,9 @@ class AES():
         new_key_state = numpy.zeros(shape=(4, 4), dtype=numpy.byte)
 
         w3 = copy.deepcopy(key_state[:,3]) # TODO
-        # print('w3:\n{}'.format(w3))
         self.RotWord(w3)
-        # print('w3(rotword):\n{}'.format(w3))
         self.SubWord(w3)
-        # print('w3(subword):\n{}'.format(w3))
         self.AddRoundConst(w3, round_count)
-        # print('w3(addroundconst):\n{}'.format(w3))
 
         # Perform w4
         for i, cell in enumerate(key_state[:,0]):
@@ -381,7 +354,6 @@ class AES():
             w_aux = new_key_state[:,i]
 
             for j, cell in enumerate(key_state[:,i+1]):
-                # print(hex(w_aux[j] & 0xff), hex(cell & 0xff), hex((w_aux[j] ^ cell) & 0xff))
                 new_key_state[j][i+1] = w_aux[j] ^ cell
 
         # Update key state with new key state
@@ -409,7 +381,6 @@ class AES():
                 else:
                     mapped_j = ((j + i) + 4) % 4
                     
-                # print('{} mapped to {}'.format(j, mapped_j))
                 aux_array[mapped_j] = curr_state[i][j]
                 
             for j in range(0, 4):
@@ -505,7 +476,7 @@ class AES():
                         
             state.fill(0)
             
-        return encoded
+        return encoded # Return bytes !
 
     @classmethod
     def Decode(self, encoded, keys):
@@ -551,7 +522,7 @@ class AES():
                         
             state.fill(0)
             
-        return decoded.rstrip(b'\x00')
+        return decoded.rstrip(b'\x00') # Return bytes !
 
 class AES_CTR():
     # Constructor
@@ -574,6 +545,7 @@ class AES_CTR():
         plain_state = b''
         plain_offset = 0
         counter = 0 # Counter used with nonce
+        num_bytes = 0
 
         if plain: # Codifica mensagem plain
             while plain_offset < len(plain):
@@ -604,9 +576,10 @@ class AES_CTR():
             try:
                 with open(filename, 'rb') as f:
                     while True:
-                        while len(file_bytes) < 16:
-                            data = f.read(BUF_SIZE)
+                        while len(plain_state) < 16:
+                            data = f.read(16)
                             if not data:    break
+                            num_bytes += 1
                             plain_state += data
 
                         if len(plain_state) < 16:
@@ -623,13 +596,13 @@ class AES_CTR():
             except Exception as e:
                 print(e)
 
-        return encoded
+        return encoded # Return bytes !
 
     def Decode(self, encoded):
         if self.keyBlocks is None:  raise NoKeyBlocks
         elif self.nonce is None:  raise NoNonce
 
-        plain = b''
+        decoded = b''
         encoded_state = b''
         encoded_offset = 0
         counter = 0 # Counter used with nonce
@@ -646,18 +619,13 @@ class AES_CTR():
                     break
                 
             encoded_offset += offset_adder
-
-            to_AES = self.nonce + counter.to_bytes(8, byteorder='big') # to_aes 128 bits
-            
+            to_AES = self.nonce + counter.to_bytes(8, byteorder='big') # to_aes 128 bits         
             enc_counter = AES.Encode(to_AES, self.keyBlocks)
-            
-            plain += xor(enc_counter, encoded_state)
-                        
+            decoded += xor(enc_counter, encoded_state).rstrip(b'\x00')
+            counter += 1                 
             encoded_state = b''
 
-        return plain.rstrip(b'\x00').decode()
-
-
+        return decoded # Return bytes !
 
 class NoKeyBlocks(Exception):
     pass
