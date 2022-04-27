@@ -8,7 +8,7 @@ def Server():
     print('http server is starting...')
     server_address = ('127.0.0.1', 80)
     httpd = HTTPServer(server_address, MyHTTPRequestHandler)  
-    print('http server is running...')  
+    print('http server is running...')
     httpd.serve_forever()
 
 def Client():
