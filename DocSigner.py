@@ -78,10 +78,11 @@ def SignMsg(plain):
     payload['dig_sig'] = rsa_encoded # BASE64
 
     print("\n< AES CTR (Counter) >")
+    print(" [*] Gerando chave AES e nonce ...")
     aes_key = AES.Generate_Key(SIM_KEY_SIZE)
     nonce = random.getrandbits(64)
-    print("> key:", aes_key)
-    print("> Random generated Nonce: {:064b}\n".format(nonce))
+    print("  > key:", aes_key)
+    print("  > Random generated Nonce: {:064b}\n".format(nonce))
 
     try:
         print(" [*] Codificando mensagem ...")
@@ -150,6 +151,8 @@ def Client(mode):
         target_hash = RSA_OAEP.RSA_OAEP_decoder(payload_enc_base64, payload_pkey).decode()
         aes_key = RSA_OAEP.RSA_OAEP_decoder(payload_enc_aes_key, payload_pkey).decode()
         nonce_bytes = RSA_OAEP.RSA_OAEP_decoder(payload_enc_nonce, payload_pkey)
+        print("  > key:", aes_key)
+        print("  > Nonce: {:064b}\n".format(int.from_bytes(nonce_bytes, byteorder="big")))
 
         print("\n< AES CTR (Counter) >")
         print(" [*] Decodificando documento recebido ...")
@@ -158,11 +161,11 @@ def Client(mode):
         aes_ctr.SetNonce(nonce_bytes)
         doc = aes_ctr.Decode(payload_enc_doc)
 
-        print(" [*] Calculando hash documento recebido ...")
+        print("\n [*] Calculando hash documento recebido ...")
         doc_hash = RSA_OAEP.DoHash(doc)
         print(" [*] Comparando hashes ...")
-        print("\n>>> Desired doc  (hash): {}".format(target_hash))
-        print(">>> Received doc (hash): {}\n".format(doc_hash))
+        print("\n>>> Esperado (hash): {}".format(target_hash))
+        print(">>> Recebido (hash): {}\n".format(doc_hash))
 
         if target_hash == doc_hash:
             if mode == FROM_FILE:
@@ -171,7 +174,7 @@ def Client(mode):
                     data = f.write(doc)
             else:
                 print(" [#] Mensagem é válida :)")
-                print("\n [#] Mensagem: {}".format(doc.decode()))
+                print("\n [#] Mensagem: {}\n".format(doc.decode()))
         else:
             if mode == FROM_FILE:   print(" [X] Documento é inválido :(")
             else: print(" [#] Mensagem inválida :(")
