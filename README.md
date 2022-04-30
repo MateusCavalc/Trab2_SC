@@ -4,13 +4,15 @@
 Este trabalho simula um sistema de assinatura digital de mensagens simples (entradas de texto) e arquivos baseado em uma arquitetura de cliente/servidor.
 ## Servidor
 
-De maneira inicial, é necessário executar o arquivo 'SC_trab2.py' como servidor. Para isso, basta executar a seguinte linha de comando:
+De maneira inicial, é necessário executar o arquivo 'DocSigner.py' como servidor. Para isso, basta executar a seguinte linha de comando:
 
 ```bash
-  python SC_trab2.py server
+  python DocSigner.py server
 ```
 
 A partir disso, será hospedado um servidor REST no endereço 127.0.0.1 e porta 80 que responde às requisições do cliente.
+
+![App Screenshot](https://github.com/MateusCavalc/Trab2_SC/blob/main/rel/server_exemplo.png)
 
 ## Cliente
 ### Assinatura de arquivo
@@ -18,7 +20,7 @@ A partir disso, será hospedado um servidor REST no endereço 127.0.0.1 e porta 
 Com o servidor rodando em outro terminal, é necessário executar o lado do cliente. Para enviar uma requisição de assinatura de arquivo, basta executar a seguinte linha de comando:
 
 ```bash
-  python SC_trab2.py client --file
+  python DocSigner.py client --file
 ```
 
 Logo após a execução do comando, o lado do cliente pede (input de usuário) o nome do arquivo desejado para assinatura. Caso exista no lado do servidor, ele recebe o documento assinado e verifica sua integridade.
@@ -30,7 +32,7 @@ Logo após a execução do comando, o lado do cliente pede (input de usuário) o
 Para enviar uma requisição de assinatura de mensagem (entrada de texto), basta executar a seguinte linha de comando:
 
 ```bash
-  python SC_trab2.py client --raw
+  python DocSigner.py client --raw
 ```
 
 ![App Screenshot](https://github.com/MateusCavalc/Trab2_SC/blob/main/rel/modo1_client.png)
