@@ -5,6 +5,7 @@ import hashlib
 import random
 import copy
 import base64
+import os
 
 MIN_BITSIZE = 1024 # BITS
 SIM_KEY_SIZE = 16 # BYTES
@@ -106,6 +107,18 @@ INV_GALOIS_FIELD = numpy.array([[14, 11, 13, 9],
                                 [11, 13, 9, 14]], dtype='<u1')
 
 ROUNDS = {EAS_128:10, EAS_192:12, EAS_256:14}
+
+def getLoadingBar(num_bytes, fileSize):
+    bar = ''
+    pct = int((num_bytes/fileSize)*10)
+
+    while len(bar) < pct:
+        bar += chr(9608)
+
+    while len(bar) < 10:
+        bar += chr(32)
+
+    return bar
 
 def AddPadding(block):
     M = copy.deepcopy(block)
@@ -226,14 +239,9 @@ class RSA_OAEP():
     @classmethod
     def Get_N_and_E(self, key_size):
         p = RabinMiller.generateLargePrime(key_size)
-        q = RabinMiller.generateLargePrime(key_size)
-
-        print('done')
-        
+        q = RabinMiller.generateLargePrime(key_size)        
         N = p * q
-
         Pn = (p-1) * (q-1)
-        
         while True:
             E = random.randrange(2 ** (key_size - 1), 2 ** (key_size))
             if MDC(Pn, E) == 1: break
@@ -241,18 +249,53 @@ class RSA_OAEP():
         return N, E, Pn
 
     @classmethod
-    def Generate_Key_Pair(self, key_size):
+    def Generate_Key_Pair(self, keys_filename, key_size):
+        print(" [!] Gerando arquivo '{}' ...".format(keys_filename), end='')
         N, E, Pn = self.Get_N_and_E(key_size)
-        print('N = {}'.format(hex(N)))
-        print('E = {}'.format(hex(E)))
+        # print('N = {}'.format(hex(N)))
+        # print('E = {}'.format(hex(E)))
         
         D = findModInverse(E, Pn)
-        print('D = {}'.format(hex(D)))
+        # print('D = {}'.format(hex(D)))
 
-        public_key = (E, N)
-        private_key = (D, N)
+        toFile = b''
+        toFile += N.to_bytes(256, byteorder='big')
+        toFile += E.to_bytes(128, byteorder='big')
+        toFile += D.to_bytes(256, byteorder='big')
+
+        with open('./' + keys_filename, 'wb') as f:
+            data = f.write(toFile)
             
-        return public_key, private_key
+        print(" Done.\n")
+
+    @staticmethod
+    def GetPrivateKeyFromFile(keys_filename):
+        print(" [*] Importando chave privada do arquivo arquivo '{}' ...".format(keys_filename), end='')
+
+        private_key = None
+
+        with open('./' + keys_filename, 'rb') as f:
+            N = int.from_bytes(f.read(256), byteorder='big')
+            f.seek(384)
+            D = int.from_bytes(f.read(256), byteorder='big')
+            private_key = (D, N)
+            
+        print(" Done.\n")
+        return private_key
+
+    @staticmethod
+    def GetPublicKeyFromFile(keys_filename):
+        print(" [*] Importando chave pública do arquivo arquivo '{}' ...".format(keys_filename), end='')
+
+        public_key = None
+
+        with open('./' + keys_filename, 'rb') as f:
+            N = int.from_bytes(f.read(256), byteorder='big')
+            E = int.from_bytes(f.read(128), byteorder='big')
+            public_key = (E, N)
+            
+        print(" Done.\n")
+        return public_key
 
     @staticmethod
     def RSA_OAEP_encoder(plain_bytes, private_key): # Return plain_bytes encoded BASE64
@@ -572,6 +615,7 @@ class AES_CTR():
                 plain_state = b''
 
         elif filename: # Codifica arquivo
+            fileSize = os.path.getsize('./server_docs/' + filename)
             data = None
             try:
                 with open('./server_docs/' + filename, 'rb') as f:
@@ -579,7 +623,7 @@ class AES_CTR():
                         while len(plain_state) < 16:
                             data = f.read(16)
                             if not data:    break
-                            num_bytes += 1
+                            num_bytes += len(data)
                             plain_state += data
 
                         if len(plain_state) < 16:
@@ -589,6 +633,7 @@ class AES_CTR():
                         to_AES = self.nonce + counter.to_bytes(8, byteorder='big') # to_aes 128 bits
                         enc_counter = AES.Encode(to_AES, self.keyBlocks)
                         encoded += xor(enc_counter, plain_state)
+                        print('\r\t\t\t\t' + " |{}| {}/{}".format(getLoadingBar(num_bytes, fileSize), num_bytes, fileSize), end='')
                         if not data:    break
                         counter += 1
                         plain_state = b''
@@ -606,6 +651,7 @@ class AES_CTR():
         encoded_state = b''
         encoded_offset = 0
         counter = 0 # Counter used with nonce
+        num_bytes = 0
         
         while encoded_offset < len(encoded):
             offset_adder = 0
@@ -619,9 +665,15 @@ class AES_CTR():
                     break
                 
             encoded_offset += offset_adder
+            num_bytes += offset_adder
             to_AES = self.nonce + counter.to_bytes(8, byteorder='big') # to_aes 128 bits         
             enc_counter = AES.Encode(to_AES, self.keyBlocks)
-            decoded += xor(enc_counter, encoded_state).rstrip(b'\x00')
+            if encoded_offset < len(encoded):
+                decoded += xor(enc_counter, encoded_state)
+            else:
+                decoded += xor(enc_counter, encoded_state).rstrip(b'\x00')
+
+            print('\r\t\t\t\t\t\t' + " |{}| {}/{}".format(getLoadingBar(num_bytes, len(encoded)), num_bytes, len(encoded)), end='')
             counter += 1                 
             encoded_state = b''
 

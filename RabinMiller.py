@@ -59,7 +59,7 @@ def generateLargePrime(n):
         prime_candidate = getLowLevelPrime(n)
 
         if isMillerRabinPassed(prime_candidate):
-            print(n, "bit prime is: \n", prime_candidate)
+            # print(n, "bit prime is: \n", prime_candidate)
             break
 
     return prime_candidate

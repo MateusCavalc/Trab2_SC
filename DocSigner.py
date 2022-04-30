@@ -7,6 +7,8 @@ import json
 FROM_RAW = 1
 FROM_FILE = 2
 
+KEY_PAIR_FILENAME = 'KeyPair.kp'
+
 def SignDoc(filename):
     payload = {}
     print(" [*] Gerando hash do arquivo '{}' ...".format(filename))
@@ -23,8 +25,7 @@ def SignDoc(filename):
         # RSA cipher
         print("\n< RSA >")
         print(" [*] Gerando chaves RSA ...")
-        public_key, private_key = RSA_OAEP.Generate_Key_Pair(MIN_BITSIZE)
-        payload['public_key'] = public_key # INT
+        private_key = RSA_OAEP.GetPrivateKeyFromFile(KEY_PAIR_FILENAME)
 
         print("\n [*] Codificando Hash do arquivo ...")
         rsa_encoded = RSA_OAEP.RSA_OAEP_encoder(file_hash.encode(), private_key) # BASE64
@@ -40,7 +41,7 @@ def SignDoc(filename):
         print(" > Random generated Nonce: {:064b}\n".format(nonce))
 
         try:
-            print(" [*] Codificando arquivo ...")
+            print(" [*] Codificando arquivo ... ", end='')
             aes_ctr = AES_CTR()
             aes_ctr.ComputeKeyBlocks(aes_key)
             aes_ctr.SetNonce(nonce.to_bytes(8, byteorder='big'))
@@ -49,7 +50,7 @@ def SignDoc(filename):
             # print("> AES CTR encoded file (HEX):", encoded.hex())
             payload['doc'] = encoded.hex() # HEX
 
-            print(" [*] Codificando chave AES e nonce usando RSA ...")
+            print("\n\n [*] Codificando chave AES e nonce usando RSA ...")
             aes_key_encoded = RSA_OAEP.RSA_OAEP_encoder(aes_key.encode(), private_key)
             nonce_encoded = RSA_OAEP.RSA_OAEP_encoder(nonce.to_bytes(8, byteorder='big'), private_key)
             # print("> AES CTR encoded key (BASE64):", (aes_key_encoded, nonce_encoded))
@@ -69,8 +70,7 @@ def SignMsg(plain):
     # RSA cipher
     print("\n< RSA >")
     print(" [*] Gerando chaves RSA ...")
-    public_key, private_key = RSA_OAEP.Generate_Key_Pair(MIN_BITSIZE)
-    payload['public_key'] = public_key # INT
+    private_key = RSA_OAEP.GetPrivateKeyFromFile(KEY_PAIR_FILENAME)
 
     print("\n [*] Codificando Hash da mensagem ...")
     rsa_encoded = RSA_OAEP.RSA_OAEP_encoder(plain_hash.encode(), private_key) # BASE64
@@ -137,25 +137,24 @@ def Client(mode):
         print("Encoded Doc length: {} bytes".format(len(payload['doc'])))
         print("Encoded AES key (BASE64): {}".format(payload['aes_key']))
         print("Digital signature (BASE64): {}".format(payload['dig_sig']))
-        print("Public key (HEX): ({}, {})".format(hex(payload['public_key'][0]), hex(payload['public_key'][1])))
         print("------------------------------------------------------------")
 
         payload_enc_doc = bytes.fromhex(payload['doc'])
         payload_enc_aes_key = payload['aes_key'][0]
         payload_enc_nonce = payload['aes_key'][1]
         payload_enc_base64 = payload['dig_sig']
-        payload_pkey = (int(payload['public_key'][0]), int(payload['public_key'][1]))
 
         print("\n< RSA >")
+        public_key = RSA_OAEP.GetPublicKeyFromFile(KEY_PAIR_FILENAME)
         print(" [*] Decodificando hash recebido e chave AES ...")
-        target_hash = RSA_OAEP.RSA_OAEP_decoder(payload_enc_base64, payload_pkey).decode()
-        aes_key = RSA_OAEP.RSA_OAEP_decoder(payload_enc_aes_key, payload_pkey).decode()
-        nonce_bytes = RSA_OAEP.RSA_OAEP_decoder(payload_enc_nonce, payload_pkey)
+        target_hash = RSA_OAEP.RSA_OAEP_decoder(payload_enc_base64, public_key).decode()
+        aes_key = RSA_OAEP.RSA_OAEP_decoder(payload_enc_aes_key, public_key).decode()
+        nonce_bytes = RSA_OAEP.RSA_OAEP_decoder(payload_enc_nonce, public_key)
         print("  > key:", aes_key)
         print("  > Nonce: {:064b}\n".format(int.from_bytes(nonce_bytes, byteorder="big")))
 
         print("\n< AES CTR (Counter) >")
-        print(" [*] Decodificando documento recebido ...")
+        print(" [*] Decodificando documento recebido ...", end='')
         aes_ctr = AES_CTR()
         aes_ctr.ComputeKeyBlocks(aes_key)
         aes_ctr.SetNonce(nonce_bytes)
@@ -176,7 +175,8 @@ def Client(mode):
                 print(" [#] Mensagem é válida :)")
                 print("\n [#] Mensagem: {}\n".format(doc.decode()))
         else:
-            if mode == FROM_FILE:   print(" [X] Documento é inválido :(")
+            if mode == FROM_FILE:
+                print(" [X] Documento é inválido :(")
             else: print(" [#] Mensagem inválida :(")
     
     else:
@@ -212,19 +212,29 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
 if __name__ == '__main__':
     
     if len(argv) > 1:
-        if argv[1] == 'server':
-            Server() # SERVIDOR
-        
-        elif argv[1] == 'client':
-            if argv[2] == '--file':
-                Client(FROM_FILE)
-            elif argv[2] == '--raw':
-                Client(FROM_RAW)
+        if argv[1] == 'genkeys':
+            if not os.path.exists('./' + KEY_PAIR_FILENAME):
+                RSA_OAEP.Generate_Key_Pair(KEY_PAIR_FILENAME, MIN_BITSIZE)
             else:
-                print("[X] Modo de assinatura inválida (tente '--file' ou '--raw')")
-
+                if input(" [!] Já existe um par de chaves RSA criadas, gostaria de sobrescrever as chaves existentes? (y/n): ") == 'y':
+                    RSA_OAEP.Generate_Key_Pair(KEY_PAIR_FILENAME, MIN_BITSIZE)
         else:
-            print("[X] Modo inválido (tente 'server' ou 'client')")
+            if not os.path.exists('./' + KEY_PAIR_FILENAME):
+                print("[X] Não foi possível encontrar o arquivo '{}'. Para gerar o par de chaves (RSA), tente executar o script com o modo 'genkeys'.\n".format(KEY_PAIR_FILENAME))
+            else:
+                if argv[1] == 'server':
+                    Server() # SERVIDOR
+                
+                elif argv[1] == 'client':
+                    if argv[2] == '--file':
+                        Client(FROM_FILE)
+                    elif argv[2] == '--raw':
+                        Client(FROM_RAW)
+                    else:
+                        print("[X] Modo de assinatura inválida (tente '--file' ou '--raw')")
+
+                else:
+                    print("[X] Modo inválido (tente 'server' ou 'client')")
     
     else:
         print("[X] Nenhum modo especificado (tente 'server' ou 'client')")
