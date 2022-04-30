@@ -2,6 +2,9 @@
 # Segurança Computacional - Trabalho 2
 
 Este trabalho simula um sistema de assinatura digital de mensagens simples (entradas de texto) e arquivos baseado em uma arquitetura de cliente/servidor.
+
+-----
+
 ## [Servidor]
 
 De maneira inicial, é necessário executar o arquivo 'DocSigner.py' como servidor. Para isso, basta executar a seguinte linha de comando:
@@ -13,6 +16,8 @@ De maneira inicial, é necessário executar o arquivo 'DocSigner.py' como servid
 A partir disso, será hospedado um servidor REST no endereço 127.0.0.1 e porta 80 que responde às requisições do cliente.
 
 ![App Screenshot](https://github.com/MateusCavalc/Trab2_SC/blob/main/rel/server_exemplo.png)
+
+-----
 
 ## [Cliente]
 ### > Assinatura de arquivo
@@ -30,6 +35,8 @@ Logo após a execução do comando, o lado do cliente pede (input de usuário) o
 ![App Screenshot](https://github.com/MateusCavalc/Trab2_SC/blob/main/rel/modo2_client.png)
 ![App Screenshot](https://github.com/MateusCavalc/Trab2_SC/blob/main/rel/modo2_server.png)
 
+-----
+
 ### > Assinatura de mensagem
 Para enviar uma requisição de assinatura de mensagem (entrada de texto), basta executar a seguinte linha de comando:
 
@@ -43,6 +50,8 @@ Logo após a execução do comando, o lado do servidor pede (input de usuário) 
 
 ![App Screenshot](https://github.com/MateusCavalc/Trab2_SC/blob/main/rel/modo1_client.png)
 ![App Screenshot](https://github.com/MateusCavalc/Trab2_SC/blob/main/rel/modo1_server.png)
+
+-----
 
 ## Observações
 
