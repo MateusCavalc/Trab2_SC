@@ -23,7 +23,7 @@ Com o servidor rodando em outro terminal, é necessário executar o lado do clie
   python DocSigner.py client --file
 ```
 
-Logo após a execução do comando, o lado do cliente pede (input de usuário) o nome do arquivo desejado para assinatura. Caso exista no lado do servidor, ele recebe o documento assinado e verifica sua integridade.
+Logo após a execução do comando, o lado do cliente pede (input de usuário) o nome do arquivo desejado para assinatura. Caso exista no lado do servidor (os arquivos são procurado no diretório ./server_docs/), ele recebe o documento assinado e verifica sua integridade. Caso documento seja válido, ele é salvo no diretório ./client_docs/
 
 ![App Screenshot](https://github.com/MateusCavalc/Trab2_SC/blob/main/rel/modo2_client.png)
 ![App Screenshot](https://github.com/MateusCavalc/Trab2_SC/blob/main/rel/modo2_server.png)
