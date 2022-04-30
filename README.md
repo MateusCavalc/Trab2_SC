@@ -5,7 +5,7 @@ Este trabalho simula um sistema de assinatura digital de mensagens simples (entr
 
 -----
 
-## [Servidor]
+## [SERVIDOR]
 
 De maneira inicial, é necessário executar o arquivo 'DocSigner.py' como servidor. Para isso, basta executar a seguinte linha de comando:
 
@@ -19,7 +19,7 @@ A partir disso, será hospedado um servidor REST no endereço 127.0.0.1 e porta 
 
 -----
 
-## [Cliente]
+## [CLIENTE]
 ### > Assinatura de arquivo
 
 Com o servidor rodando em outro terminal, é necessário executar o lado do cliente. Para enviar uma requisição de assinatura de arquivo, basta executar a seguinte linha de comando:
