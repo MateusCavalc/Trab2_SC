@@ -208,7 +208,7 @@ class RSA_OAEP():
 
         try:
             if fromFile:
-                with open(toHash, 'rb') as f:
+                with open('./server_docs/' + toHash, 'rb') as f:
                     while True:
                         data = f.read(BUF_SIZE)
                         if not data:    break
@@ -574,7 +574,7 @@ class AES_CTR():
         elif filename: # Codifica arquivo
             data = None
             try:
-                with open(filename, 'rb') as f:
+                with open('./server_docs/' + filename, 'rb') as f:
                     while True:
                         while len(plain_state) < 16:
                             data = f.read(16)
