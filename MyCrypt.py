@@ -633,7 +633,7 @@ class AES_CTR():
                         to_AES = self.nonce + counter.to_bytes(8, byteorder='big') # to_aes 128 bits
                         enc_counter = AES.Encode(to_AES, self.keyBlocks)
                         encoded += xor(enc_counter, plain_state)
-                        print('\r\t\t\t\t\t' + " |{}| {}/{}".format(getLoadingBar(num_bytes, fileSize), num_bytes, fileSize), end='')
+                        print('\r  |> ' + "|{}| {}/{}".format(getLoadingBar(num_bytes, fileSize), num_bytes, fileSize), end='')
                         if not data:    break
                         counter += 1
                         plain_state = b''
@@ -673,7 +673,7 @@ class AES_CTR():
             else:
                 decoded += xor(enc_counter, encoded_state).rstrip(b'\x00')
 
-            print('\r\t\t\t\t\t\t\t' + " |{}| {}/{}".format(getLoadingBar(num_bytes, len(encoded)), num_bytes, len(encoded)), end='')
+            print('\r  |> ' + "|{}| {}/{}".format(getLoadingBar(num_bytes, len(encoded)), num_bytes, len(encoded)), end='')
             counter += 1                 
             encoded_state = b''
 

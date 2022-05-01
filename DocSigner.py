@@ -53,7 +53,7 @@ def SignDoc(filename):
             aes_ctr.ComputeKeyBlocks(aes_key)
             aes_ctr.SetNonce(nonce.to_bytes(8, byteorder='big'))
             # Codifica o documento (AES CTR) e coloca no payload
-            print(" [*] Codificando arquivo (AES CTR) ... ", end='')
+            print(" [*] Codificando arquivo usando AES CTR ...")
             encoded = aes_ctr.Encode(filename=filename)
             payload['doc'] = encoded.hex() # HEX
         except NoKeyBlocks:
@@ -99,7 +99,7 @@ def SignMsg(plain):
         aes_ctr.ComputeKeyBlocks(aes_key)
         aes_ctr.SetNonce(nonce.to_bytes(8, byteorder='big'))
         # Codifica a mensagem (AES CTR) e coloca no payload
-        print(" [*] Codificando mensagem (AES CTR) ... ", end='')
+        print(" [*] Codificando mensagem usando AES CTR ...")
         encoded = aes_ctr.Encode(plain=plain)
         payload['doc'] = encoded.hex() # HEX
     except NoKeyBlocks:
@@ -168,13 +168,12 @@ def Client(mode):
         print("  |-[$] Hash (recebido):", target_hash)
         print("  |-[$] Key:", aes_key)
         print("  |-[$] Nonce: {:064b}".format(int.from_bytes(nonce_bytes, byteorder="big")))
-
-        print(" [*] Decodificando documento recebido usando AES CTR ...", end='')
         # Monta a estrutura para o algoritmo AES
         aes_ctr = AES_CTR()
         aes_ctr.ComputeKeyBlocks(aes_key)
         aes_ctr.SetNonce(nonce_bytes)
         # Decodifica o documento recebido (AES CTR)
+        print(" [*] Decodificando documento recebido usando AES CTR ...")
         doc = aes_ctr.Decode(payload_enc_doc)
 
         print()
