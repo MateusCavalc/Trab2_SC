@@ -110,7 +110,7 @@ ROUNDS = {EAS_128:10, EAS_192:12, EAS_256:14}
 
 def getLoadingBar(num_bytes, fileSize):
     bar = ''
-    scale = 2
+    scale = 4
     pct = int((num_bytes/fileSize)*(10*scale))
     while len(bar) < pct:
         bar += chr(9608)
@@ -299,7 +299,7 @@ class RSA_OAEP():
 
     @staticmethod
     def RSA_OAEP_encoder(plain_bytes, private_key): # Return plain_bytes encoded BASE64
-        # print('\n[RSA_OAEP] Encoding \'{}\' with private key ({}, {}) ...\n'.format(plain_bytes, hex(private_key[0]), hex(private_key[1])))
+        # print('\n[RSA_OAEP] Encoding \'{}\' {} with private key ({}, {}) ...\n'.format(plain_bytes, len(plain_bytes), hex(private_key[0]), hex(private_key[1])))
 
         E = private_key[0]
         N = private_key[1]
