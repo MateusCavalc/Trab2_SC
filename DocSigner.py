@@ -222,12 +222,15 @@ if __name__ == '__main__':
                 
                 # Modo CLIENTE
                 elif argv[1] == 'client':
-                    if argv[2] == '--file':
-                        Client(FROM_FILE)
-                    elif argv[2] == '--raw':
-                        Client(FROM_RAW)
+                    if len(argv) == 3:
+                        if argv[2] == '--file':
+                            Client(FROM_FILE)
+                        elif argv[2] == '--raw':
+                            Client(FROM_RAW)
+                        else:
+                            print("[X] Flag de cliente inválida (tente '--file' ou '--raw')")
                     else:
-                        print("[X] Flag de cliente inválida (tente '--file' ou '--raw')")
+                        print("[X] Flag de cliente não fornecida (tente '--file' ou '--raw')")
 
                 else:
                     print("[X] Modo inválido (tente 'genkeys', 'server' ou 'client')")
