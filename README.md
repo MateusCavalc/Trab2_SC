@@ -5,6 +5,18 @@ Este trabalho simula um sistema de assinatura digital de mensagens simples (entr
 
 -----
 
+## [GERAÇÃO DE CHAVES]
+
+Antes da execução, é necessário gerar o arquivo com o par de chaves RSA usadas durante o processo de assinatura e verificação de integridade de documentos. Para isso, basta executar o script com o seguinte modo:
+
+```bash
+  python DocSigner.py genkeys
+```
+
+O arquivo 'KeyPair.kp' é gerado no diretório base do projeto. Caso já exista um arquivo com as chaves, o script pergunta se deve gerar novas chaves e sobrescrever as antigas.
+
+-----
+
 ## [SERVIDOR]
 
 De maneira inicial, é necessário executar o arquivo 'DocSigner.py' como servidor. Para isso, basta executar a seguinte linha de comando:
