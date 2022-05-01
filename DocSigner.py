@@ -81,7 +81,7 @@ def Server():
 
 # Método de inicialização de cliente
 def Client(mode):
-    connection = http.client.HTTPConnection('127.0.0.1', 80, timeout=60)
+    connection = http.client.HTTPConnection('127.0.0.1', 80, timeout=None)
 
     # Monta o header e corpo de requisição
     headers = {'Content-type': 'application/json'}

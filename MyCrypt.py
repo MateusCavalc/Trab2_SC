@@ -6,6 +6,8 @@ import random
 import copy
 import base64
 import os
+import time
+import datetime
 
 MIN_BITSIZE = 1024 # BITS
 SIM_KEY_SIZE = 16 # BYTES
@@ -589,11 +591,11 @@ class AES_CTR():
         plain_offset = 0
         counter = 0 # Counter used with nonce
         num_bytes = 0
+        old = round(time.time() * 1000)
 
-        if plain: # Codifica mensagem plain
+        if plain: # Codifica mensagem plain     
             while plain_offset < len(plain):
                 offset_adder = 0
-
                 while offset_adder < 16:
                     # fill plain_state with 16 characters from plain text
                     if plain_offset + offset_adder < len(plain):
@@ -607,10 +609,15 @@ class AES_CTR():
                         plain_state += b'\x00'
                     
                 plain_offset += offset_adder
+                num_bytes += offset_adder
 
                 to_AES = self.nonce + counter.to_bytes(8, byteorder='big') # to_aes 128 bits
                 enc_counter = AES.Encode(to_AES, self.keyBlocks)
                 encoded += xor(enc_counter, plain_state)
+                new = round(time.time() * 1000)
+                taxa = (num_bytes/(new - old))
+                eta = datetime.timedelta(0, (taxa/1000)*(len(plain)-num_bytes))
+                print('\r  |> ' + "|{}| {}/{} ETA: {} ({:.2f} KB/s)".format(getLoadingBar(num_bytes, len(plain)), num_bytes, len(plain), str(eta), taxa), end='')
                 counter += 1       
                 plain_state = b''
 
@@ -633,7 +640,10 @@ class AES_CTR():
                         to_AES = self.nonce + counter.to_bytes(8, byteorder='big') # to_aes 128 bits
                         enc_counter = AES.Encode(to_AES, self.keyBlocks)
                         encoded += xor(enc_counter, plain_state)
-                        print('\r  |> ' + "|{}| {}/{}".format(getLoadingBar(num_bytes, fileSize), num_bytes, fileSize), end='')
+                        new = round(time.time() * 1000)
+                        taxa = (num_bytes/(new - old))
+                        eta = datetime.timedelta(0, (taxa/1000)*(fileSize-num_bytes))
+                        print('\r  |> ' + "|{}| {}/{} ETA: {} ({:.2f} KB/s)".format(getLoadingBar(num_bytes, fileSize), num_bytes, fileSize, str(eta), taxa), end='')
                         if not data:    break
                         counter += 1
                         plain_state = b''
@@ -652,10 +662,10 @@ class AES_CTR():
         encoded_offset = 0
         counter = 0 # Counter used with nonce
         num_bytes = 0
+        old = round(time.time() * 1000)
         
         while encoded_offset < len(encoded):
             offset_adder = 0
-
             while offset_adder < 16:
                 # fill encoded_state with 16 characters from encoded text
                 if encoded_offset + offset_adder < len(encoded):
@@ -673,7 +683,10 @@ class AES_CTR():
             else:
                 decoded += xor(enc_counter, encoded_state).rstrip(b'\x00')
 
-            print('\r  |> ' + "|{}| {}/{}".format(getLoadingBar(num_bytes, len(encoded)), num_bytes, len(encoded)), end='')
+            new = round(time.time() * 1000)
+            taxa = (num_bytes/(new - old))
+            eta = datetime.timedelta(0, (taxa/1000)*(len(encoded)-num_bytes))
+            print('\r  |> ' + "|{}| {}/{} ETA: {} ({:.2f} KB/s)".format(getLoadingBar(num_bytes, len(encoded)), num_bytes, len(encoded), str(eta), taxa), end='')
             counter += 1                 
             encoded_state = b''
 
