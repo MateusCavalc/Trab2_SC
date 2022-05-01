@@ -13,6 +13,8 @@ Antes da execução, é necessário gerar o arquivo com o par de chaves RSA usad
   python DocSigner.py genkeys
 ```
 
+![App Screenshot](https://github.com/MateusCavalc/Trab2_SC/blob/main/rel/modo0_genkeys.png)
+
 O arquivo 'KeyPair.kp' é gerado no diretório base do projeto. Caso já exista um arquivo com as chaves, o script pergunta se deve gerar novas chaves e sobrescrever as antigas.
 
 -----

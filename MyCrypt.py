@@ -110,12 +110,12 @@ ROUNDS = {EAS_128:10, EAS_192:12, EAS_256:14}
 
 def getLoadingBar(num_bytes, fileSize):
     bar = ''
-    pct = int((num_bytes/fileSize)*10)
-
+    scale = 2
+    pct = int((num_bytes/fileSize)*(10*scale))
     while len(bar) < pct:
         bar += chr(9608)
 
-    while len(bar) < 10:
+    while len(bar) < 10*scale:
         bar += chr(32)
 
     return bar
@@ -216,18 +216,18 @@ class RSA_OAEP():
     @staticmethod
     def DoHash(toHash, fromFile=False): # SHA3-256 (return HEX)
         sha3 = hashlib.sha3_256()
-        file_bytes = b''
         hashed_file = ''
 
         try:
             if fromFile:
+                print(" [*] Gerando hash do arquivo ...")
                 with open('./server_docs/' + toHash, 'rb') as f:
                     while True:
                         data = f.read(BUF_SIZE)
                         if not data:    break
-                        file_bytes += data
                         sha3.update(data)
             else:
+                print(" [*] Gerando hash da mensagem ...")
                 sha3.update(toHash)
 
             hashed_file = sha3.hexdigest()
@@ -280,7 +280,7 @@ class RSA_OAEP():
             D = int.from_bytes(f.read(256), byteorder='big')
             private_key = (D, N)
             
-        print(" Done.\n")
+        print(" Done.")
         return private_key
 
     @staticmethod
@@ -294,7 +294,7 @@ class RSA_OAEP():
             E = int.from_bytes(f.read(128), byteorder='big')
             public_key = (E, N)
             
-        print(" Done.\n")
+        print(" Done.")
         return public_key
 
     @staticmethod
@@ -633,7 +633,7 @@ class AES_CTR():
                         to_AES = self.nonce + counter.to_bytes(8, byteorder='big') # to_aes 128 bits
                         enc_counter = AES.Encode(to_AES, self.keyBlocks)
                         encoded += xor(enc_counter, plain_state)
-                        print('\r\t\t\t\t' + " |{}| {}/{}".format(getLoadingBar(num_bytes, fileSize), num_bytes, fileSize), end='')
+                        print('\r\t\t\t\t\t' + " |{}| {}/{}".format(getLoadingBar(num_bytes, fileSize), num_bytes, fileSize), end='')
                         if not data:    break
                         counter += 1
                         plain_state = b''
@@ -673,7 +673,7 @@ class AES_CTR():
             else:
                 decoded += xor(enc_counter, encoded_state).rstrip(b'\x00')
 
-            print('\r\t\t\t\t\t\t' + " |{}| {}/{}".format(getLoadingBar(num_bytes, len(encoded)), num_bytes, len(encoded)), end='')
+            print('\r\t\t\t\t\t\t\t' + " |{}| {}/{}".format(getLoadingBar(num_bytes, len(encoded)), num_bytes, len(encoded)), end='')
             counter += 1                 
             encoded_state = b''
 
