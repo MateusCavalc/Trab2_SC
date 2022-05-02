@@ -153,7 +153,7 @@ def Sign(toSign, mode):
 
     # Se não foi possível encontrar o arquivo, retorna string nula para o hash
     if len(hashed) == 0:
-        print("\n [X] Documento '{}' não encontrado !".format(filename))
+        print("\n [X] Documento '{}' não encontrado !".format(toSign))
         payload = {'error': 'Documento não encontrado'}
 
     else:
