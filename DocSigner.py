@@ -9,67 +9,41 @@ FROM_FILE = 2
 
 KEY_PAIR_FILENAME = 'KeyPair.kp'
 
-# Método de assinatura de conteudo (arquivo ou mensagem) - Retorna payload (json) para enviar ao cliente 
-def Sign(toSign, mode):
-    payload = {}
+class MyHTTPRequestHandler(BaseHTTPRequestHandler):
+    def _set_headers(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.end_headers()
 
-    # Gera hash do conteudo de acordo com o modo (SHA3-256)
-    if mode == FROM_FILE:
-        print("\n > Filename: {}".format(toSign))
-        hashed = RSA_OAEP.DoHash(toSign, fromFile=True)
-    else:
-        print("\n > Plain: {}".format(toSign))
-        hashed = RSA_OAEP.DoHash(toSign.encode())
+    def do_HEAD(self):
+        self._set_headers()
 
-    # Se não foi possível encontrar o arquivo, retorna string nula para o hash
-    if len(hashed) == 0:
-        print("\n [X] Documento '{}' não encontrado !".format(filename))
-        payload = {'error': 'Documento não encontrado'}
+    #handle POST command  
+    def do_POST(self):
+        length = int(self.headers.get('content-length'))
+        request_body = json.loads(self.rfile.read(length)) 
 
-    else:
-        print("  |> Hash: {}".format(hashed))
+        # Recebe o payload do cliente com o modo de assinatura
+        # FROM_FILE = Assina arquivo do diretório ./server_docs
+        # FROM_RAW = Assina mensagem enviada pelo servidor
 
-        # Pega a chave privada (RSA) do arquivo ./KeyPair.kp
-        private_key = RSA_OAEP.GetPrivateKeyFromFile(KEY_PAIR_FILENAME)
+        mode = request_body['mode']
 
-        # Codifica o hash do conteudo e coloca no payload
-        print("  [*] Codificando Hash usando RSA OAEP ...")
-        rsa_encoded = RSA_OAEP.RSA_OAEP_encoder(hashed.encode(), private_key) # BASE64
-        print("   |> Assinatura (BASE64): {}".format(rsa_encoded))
-        payload['dig_sig'] = rsa_encoded # BASE64
+        if mode == FROM_FILE:
+            # recebe nome do arquivo para assinar
+            toSign = request_body['filename']
+        else:
+            # Entra mensagem para assinar
+            toSign = input("\n[?] Enter string message to sign: ")
 
-        print(" [*] Gerando chave AES e nonce ...")
-        # Gera a chave AES e o Nonce
-        aes_key = AES.Generate_Key(SIM_KEY_SIZE)
-        nonce = random.getrandbits(64)
-        print("  |-[$] Key:", aes_key)
-        print("  |-[$] Random generated Nonce: {:064b}".format(nonce))
+        # Assina o conteudo de 'toSign' de acordo com o modo
+        payload = Sign(toSign, mode)
 
-        # Codifica a chave aes e nonce (utilizando RSA OAEP) e coloca no payload
-        print("     |> Codificando chave AES e nonce usando RSA ...")
-        aes_key_encoded = RSA_OAEP.RSA_OAEP_encoder(aes_key.encode(), private_key)
-        nonce_encoded = RSA_OAEP.RSA_OAEP_encoder(nonce.to_bytes(8, byteorder='big'), private_key)
-        payload['aes_key'] = (aes_key_encoded, nonce_encoded) # BASE64
+        print("\n\n [$] Assinatura completa, enviando para o cliente\n")
 
-        try:
-            # Monta a estrutura para o algoritmo AES
-            aes_ctr = AES_CTR()
-            aes_ctr.ComputeKeyBlocks(aes_key)
-            aes_ctr.SetNonce(nonce.to_bytes(8, byteorder='big'))
-            # Codifica o documento (AES CTR) e coloca no payload
-            if mode == FROM_FILE:
-                print(" [*] Codificando arquivo usando AES CTR ...")
-                encoded = aes_ctr.Encode(filename=toSign)
-            else:
-                print(" [*] Codificando mensagem usando AES CTR ...")
-                encoded = aes_ctr.Encode(plain=toSign)
-            payload['doc'] = encoded.hex() # HEX
-        except NoKeyBlocks:
-            print("\n [X] Os blocos de chaves não foram computados.\n")
-        except NoNonce:
-            print("\n [X] Nonce não definido.\n")
-
-    return payload
+        # Envia informações da assinatura para o cliente
+        self._set_headers()
+        self.wfile.write(json.dumps(payload).encode())
 
 # Método de inicialização de servidor
 def Server():
@@ -165,44 +139,69 @@ def Client(mode):
     else:
         print(" [!] Não foi possível encontrar o documento '{}'".format(filename))
 
-class MyHTTPRequestHandler(BaseHTTPRequestHandler):
-    def _set_headers(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'application/json')
-        self.end_headers()
+# Método de assinatura de conteudo (arquivo ou mensagem) - Retorna payload (json) para enviar ao cliente 
+def Sign(toSign, mode):
+    payload = {}
 
-    def do_HEAD(self):
-        self._set_headers()
+    # Gera hash do conteudo de acordo com o modo (SHA3-256)
+    if mode == FROM_FILE:
+        print("\n > Filename: {}".format(toSign))
+        hashed = RSA_OAEP.DoHash(toSign, fromFile=True)
+    else:
+        print("\n > Plain: {}".format(toSign))
+        hashed = RSA_OAEP.DoHash(toSign.encode())
 
-    #handle GET command  
-    def do_POST(self):
-        length = int(self.headers.get('content-length'))
-        request_body = json.loads(self.rfile.read(length)) 
+    # Se não foi possível encontrar o arquivo, retorna string nula para o hash
+    if len(hashed) == 0:
+        print("\n [X] Documento '{}' não encontrado !".format(filename))
+        payload = {'error': 'Documento não encontrado'}
 
-        # Recebe o payload do cliente com o modo de assinatura
-        # FROM_FILE = Assina arquivo do diretório ./server_docs
-        # FROM_RAW = Assina mensagem enviada pelo servidor
+    else:
+        print("  |> Hash: {}".format(hashed))
 
-        mode = request_body['mode']
+        # Pega a chave privada (RSA) do arquivo ./KeyPair.kp
+        private_key = RSA_OAEP.GetPrivateKeyFromFile(KEY_PAIR_FILENAME)
 
-        if mode == FROM_FILE:
-            # recebe nome do arquivo para assinar
-            toSign = request_body['filename']
-        else:
-            # Entra mensagem para assinar
-            toSign = input("\n[?] Enter string message to sign: ")
+        # Codifica o hash do conteudo e coloca no payload
+        print("  [*] Codificando Hash usando RSA OAEP ...")
+        rsa_encoded = RSA_OAEP.RSA_OAEP_encoder(hashed.encode(), private_key) # BASE64
+        print("   |> Assinatura (BASE64): {}".format(rsa_encoded))
+        payload['dig_sig'] = rsa_encoded # BASE64
 
-        # Assina o conteudo de 'toSign' de acordo com o modo
-        payload = Sign(toSign, mode)
+        print(" [*] Gerando chave AES e nonce ...")
+        # Gera a chave AES e o Nonce
+        aes_key = AES.Generate_Key(SIM_KEY_SIZE)
+        nonce = random.getrandbits(64)
+        print("  |-[$] Key:", aes_key)
+        print("  |-[$] Random generated Nonce: {:064b}".format(nonce))
 
-        print("\n\n [$] Assinatura completa, enviando para o cliente\n")
+        # Codifica a chave aes e nonce (utilizando RSA OAEP) e coloca no payload
+        print("     |> Codificando chave AES e nonce usando RSA ...")
+        aes_key_encoded = RSA_OAEP.RSA_OAEP_encoder(aes_key.encode(), private_key)
+        nonce_encoded = RSA_OAEP.RSA_OAEP_encoder(nonce.to_bytes(8, byteorder='big'), private_key)
+        payload['aes_key'] = (aes_key_encoded, nonce_encoded) # BASE64
 
-        # Envia informações da assinatura para o cliente
-        self._set_headers()
-        self.wfile.write(json.dumps(payload).encode())
+        try:
+            # Monta a estrutura para o algoritmo AES
+            aes_ctr = AES_CTR()
+            aes_ctr.ComputeKeyBlocks(aes_key)
+            aes_ctr.SetNonce(nonce.to_bytes(8, byteorder='big'))
+            # Codifica o documento (AES CTR) e coloca no payload
+            if mode == FROM_FILE:
+                print(" [*] Codificando arquivo usando AES CTR ...")
+                encoded = aes_ctr.Encode(filename=toSign)
+            else:
+                print(" [*] Codificando mensagem usando AES CTR ...")
+                encoded = aes_ctr.Encode(plain=toSign)
+            payload['doc'] = encoded.hex() # HEX
+        except NoKeyBlocks:
+            print("\n [X] Os blocos de chaves não foram computados.\n")
+        except NoNonce:
+            print("\n [X] Nonce não definido.\n")
 
-if __name__ == '__main__':
-    
+    return payload
+
+def main():
     if len(argv) > 1:
         # Modo de geração de arquivo com chaves pública e privada
         if argv[1] == 'genkeys':
@@ -237,3 +236,6 @@ if __name__ == '__main__':
     
     else:
         print("[X] Nenhum modo especificado (tente 'genkeys', 'server' ou 'client')")
+
+if __name__ == '__main__':
+    main()
